@@ -1,103 +1,116 @@
-/**
- * VAR VPN — domain types
- * این تایپ‌ها بین «شبیه‌ساز بک‌اند لوکال» و UI مشترک‌اند.
- * وقتی بک‌اند FastAPI روی سرور بالا بیاید، همین قراردادها حفظ می‌شود.
- */
+/** مدل‌های دامنه VAR VPN —镜像 of the VAR business DB schema (FastAPI/MariaDB on server). */
 
 export type Role = "customer" | "partner" | "admin";
 
-export type OrderStatus =
-  | "pending_payment"
-  | "awaiting_approval"
-  | "paid"
-  | "provisioning"
-  | "done"
-  | "failed"
-  | "rejected";
-
-export type PayMethod = "gateway" | "card" | "wallet";
-export type PaymentStatus = "pending" | "approved" | "rejected";
-export type PartnerStatus = "pending" | "active" | "suspended";
-export type AuditKind = "info" | "success" | "warn" | "error";
+export interface User {
+  id: string;
+  tgId: string;
+  name: string;
+  role: Role;
+  joinedAt: number;
+}
 
 export interface Product {
   id: string;
-  quota_gb: number;
-  duration_days: number;
-  price_toman: number;
+  name: string;
+  quotaGb: number;
+  durationDays: number;
+  price: number; // toman
+  groupId: string; // FreeRADIUS group — traffic quota only
   active: boolean;
   popular?: boolean;
 }
 
-/** اکانت RADIUS — وضعیت واقعی از radacct/FreeRADIUS می‌آید؛ اینجا snapshot لوکال است */
-export interface RadiusAccount {
+export interface VpnServer {
   id: string;
-  username: string;
-  password: string;
-  server_id: "de-1";
-  group_name: string;
-  quota_bytes: number;
-  used_bytes: number;
-  expiration: string; // ISO
-  capped: boolean; // حجم تمام شده
-  created_at: string;
-  owner: string; // 'customer' | partner id
-  note?: string;
+  name: string;
+  region: string;
+  host: string;
+  status: "online" | "maintenance";
+  latencyMs: number;
 }
+
+export interface Account {
+  id: string;
+  ownerId: string; // VAR user id
+  soldBy?: string; // partner id if created via partner sale
+  customerName?: string;
+  radiusUsername: string;
+  radiusPassword: string;
+  serverId: string;
+  groupId: string;
+  quotaBytes: number;
+  usedBytes: number; // source of truth: radacct (simulated locally)
+  expiresAt: number;
+  createdAt: number;
+  historyGb: number[]; // last 7 days from radacct daily sessions
+}
+
+export type PayMethod = "gateway" | "card" | "wallet";
+export type OrderStatus = "awaiting_payment" | "provisioning" | "active" | "failed";
 
 export interface Order {
   id: string;
-  ref: string;
-  actor: string; // 'customer' | partner id
-  actor_label: string;
-  product_id: string;
-  quantity: number;
-  /** برای تمدید: نام کاربری هدف. برای اکانت جدید: null */
-  target_username: string | null;
-  result_usernames: string[];
-  total_toman: number;
-  method: PayMethod;
+  userId: string;
+  productId: string;
+  serverId: string;
+  qty: number;
+  total: number;
+  payMethod: PayMethod;
   status: OrderStatus;
-  provision_note: string | null;
-  receipt_no: string | null;
-  created_at: string;
-  paid_at: string | null;
+  createdAt: number;
+  forCustomer?: string; // partner sales: customer label
+  failReason?: string;
+  accountIds: string[];
+  idemKey: string;
 }
+
+export type PaymentStatus = "pending" | "confirmed" | "rejected";
 
 export interface Payment {
   id: string;
-  order_id: string;
-  amount_toman: number;
+  orderId: string;
+  userId: string;
+  amount: number;
   method: PayMethod;
   status: PaymentStatus;
-  /** تعداد دفعات دریافت کال‌بک — برای نمایش idempotency */
-  callback_hits: number;
-  created_at: string;
-  processed_at: string | null;
+  receiptName?: string;
+  createdAt: number;
+  decidedAt?: number;
+  decidedBy?: string;
+  idemKey: string;
 }
 
 export interface LedgerEntry {
   id: string;
-  partner_id: string;
-  delta_toman: number;
-  balance_after: number;
-  reason: string;
-  actor_label: string;
-  at: string;
+  userId: string;
+  delta: number; // signed, toman
+  balanceAfter: number;
+  reason: string; // required — audited
+  actor: string;
+  at: number;
 }
 
-export interface Partner {
-  id: string;
-  name: string;
-  telegram: string;
-  status: PartnerStatus;
-  wallet_toman: number;
-  created_at: string;
+export interface Wallet {
+  userId: string;
+  balance: number;
+  ledger: LedgerEntry[];
 }
+
+export interface PartnerRequest {
+  id: string;
+  userId: string;
+  note: string;
+  status: "pending" | "approved" | "rejected";
+  at: number;
+  decidedAt?: number;
+}
+
+export type AuditKind = "info" | "money" | "security" | "danger";
 
 export interface AuditEntry {
   id: string;
-  at: string;
+  at: number;
   actor: string;
   action: string;
   detail: string;
@@ -105,31 +118,46 @@ export interface AuditEntry {
 }
 
 export interface Settings {
-  min_partner_balance: number;
-  card_number: string;
-  card_holder: string;
-  gateway_enabled: boolean;
-  /** گروه‌های موجود در FreeRADIUS — فقط traffic quota */
-  radius_groups: string[];
-  concurrent_devices: number;
+  minPartnerBalance: number;
+  cardNumber: string;
+  cardHolder: string;
+  gatewayEnabled: boolean;
+  supportHandle: string;
+  apiBase: string;
+  /** demo switch: simulates missing RADIUS group G50 → safe provisioning failure */
+  simulateMissingGroup: boolean;
 }
 
-export interface Profile {
-  name: string;
-  telegram: string;
-}
-
-export interface DB {
+export interface AppState {
   v: number;
-  settings: Settings;
+  currentUserId: string;
+  users: User[];
   products: Product[];
-  accounts: RadiusAccount[];
+  servers: VpnServer[];
+  accounts: Account[];
   orders: Order[];
   payments: Payment[];
-  ledger: LedgerEntry[];
-  partners: Partner[];
+  wallets: Wallet[];
+  partnerRequests: PartnerRequest[];
   audit: AuditEntry[];
-  profile: Profile;
+  settings: Settings;
+  availableGroups: string[]; // groups that exist in FreeRADIUS radgroupcheck
 }
 
-export type Snap = DB;
+export interface PurchaseInput {
+  productId: string;
+  method: PayMethod;
+  qty?: number;
+  forCustomer?: string;
+  receiptName?: string;
+}
+
+export interface PurchaseResult {
+  ok: boolean;
+  orderId: string;
+  paymentId?: string;
+  status: OrderStatus | "awaiting_payment";
+  accounts?: Account[];
+  error?: string;
+  failReason?: string;
+}

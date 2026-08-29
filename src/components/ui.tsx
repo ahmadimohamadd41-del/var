@@ -1,386 +1,372 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { OrderStatus, PartnerStatus, PaymentStatus } from "../lib/types";
-import { pct } from "../lib/format";
-import { IcCheck, IcCopy, IcMinus, IcPlus, IcX } from "./icons";
+import React, { useEffect, useRef, useState } from "react";
+import type { OrderStatus, PaymentStatus } from "../lib/types";
+import { haptic } from "../lib/store";
 
-/* --------------------------------- Button ---------------------------------- */
+/* ============================= ICONS (inline SVG) ============================= */
 
-type BtnVariant = "primary" | "gold" | "ghost" | "danger" | "dark";
+type IcProps = { className?: string };
+const S = ({ className = "w-5 h-5", children, vb = "0 0 24 24" }: IcProps & { children: React.ReactNode; vb?: string }) => (
+  <svg viewBox={vb} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    {children}
+  </svg>
+);
 
-export function Btn({
-  variant = "primary",
-  busy = false,
-  disabled = false,
-  full = true,
-  className = "",
-  onClick,
-  children,
-}: {
-  variant?: BtnVariant;
-  busy?: boolean;
-  disabled?: boolean;
-  full?: boolean;
-  className?: string;
-  onClick?: () => void;
-  children: ReactNode;
-}) {
-  const base =
-    "relative inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all duration-200 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-45";
-  const styles: Record<BtnVariant, string> = {
-    primary:
-      "bg-gradient-to-b from-mint-400 to-mint-600 text-deep-950 shadow-[0_6px_20px_-6px_rgba(35,201,147,0.55)] hover:brightness-110",
-    gold: "bg-gradient-to-b from-gold-300 to-gold-500 text-deep-950 shadow-[0_6px_20px_-6px_rgba(246,189,90,0.5)] hover:brightness-110",
-    ghost:
-      "border border-white/12 bg-white/[0.04] text-mist-100 hover:border-mint-500/40 hover:bg-mint-500/10",
-    danger:
-      "border border-coral-500/35 bg-coral-500/12 text-coral-300 hover:bg-coral-500/20",
-    dark: "bg-deep-700 text-mist-300 hover:bg-deep-600 hover:text-mist-100",
-  };
+export const LogoMark = ({ className = "w-8 h-8" }: IcProps) => (
+  <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
+    <path d="M20 4l12 5.6v9.2c0 7.2-5 11.6-12 14.4-7-2.8-12-7.2-12-14.4V9.6L20 4z" fill="rgba(35,201,147,0.12)" stroke="#f6bd5a" strokeWidth="2" />
+    <path d="M13 21l5 5 9-10" fill="none" stroke="#46dca8" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M20 1.5l2.4 2.5M20 1.5l-2.4 2.5" stroke="#7cc7e8" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+export const IcHome = (p: IcProps) => (
+  <S {...p}><path d="M3.5 10.5L12 3.5l8.5 7" /><path d="M5.5 9.5V20h13V9.5" /><path d="M9.5 20v-5.5h5V20" /></S>
+);
+export const IcStore = (p: IcProps) => (
+  <S {...p}><path d="M4 7.5L5.5 3.5h13L20 7.5" /><path d="M4 7.5h16v3a2.6 2.6 0 01-5.2 0 2.7 2.7 0 01-5.6 0A2.6 2.6 0 014 10.5v-3z" /><path d="M5.5 13.5V20.5h13v-7" /><path d="M9.5 20.5v-4h5v4" /></S>
+);
+export const IcUsers = (p: IcProps) => (
+  <S {...p}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20c.6-3.4 2.8-5.3 5.5-5.3s4.9 1.9 5.5 5.3" /><path d="M15.5 5.2a3.2 3.2 0 010 5.9M17.5 14.9c1.7.7 2.8 2.4 3 5.1" /></S>
+);
+export const IcShield = (p: IcProps) => (
+  <S {...p}><path d="M12 3l7.5 3.2v5.6c0 4.5-3.1 7.4-7.5 9.2-4.4-1.8-7.5-4.7-7.5-9.2V6.2L12 3z" /><path d="M9 12l2.2 2.2L15.5 10" /></S>
+);
+export const IcUser = (p: IcProps) => (
+  <S {...p}><circle cx="12" cy="8" r="3.5" /><path d="M5 20.5c.8-4 3.6-6 7-6s6.2 2 7 6" /></S>
+);
+export const IcBolt = (p: IcProps) => (
+  <S {...p}><path d="M13 2.5L5 13.5h5.5L10 21.5l8-11h-5.5L13 2.5z" /></S>
+);
+export const IcDownload = (p: IcProps) => (
+  <S {...p}><path d="M12 4v10.5M7.5 11l4.5 4.5L16.5 11" /><path d="M4.5 19.5h15" /></S>
+);
+export const IcCopy = (p: IcProps) => (
+  <S {...p}><rect x="8.5" y="8.5" width="11" height="11" rx="2" /><path d="M5.5 14.5h-1a1.5 1.5 0 01-1.5-1.5V5a1.5 1.5 0 011.5-1.5H13A1.5 1.5 0 0114.5 5v.5" /></S>
+);
+export const IcCheck = (p: IcProps) => (
+  <S {...p}><path d="M4.5 12.5l5 5 10-11" /></S>
+);
+export const IcX = (p: IcProps) => (
+  <S {...p}><path d="M6 6l12 12M18 6L6 18" /></S>
+);
+export const IcClock = (p: IcProps) => (
+  <S {...p}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2.5" /></S>
+);
+export const IcWallet = (p: IcProps) => (
+  <S {...p}><path d="M4 7.5A2.5 2.5 0 016.5 5h11A2.5 2.5 0 0120 7.5v9a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 16.5v-9z" /><path d="M15 12h5v3h-5a1.5 1.5 0 010-3z" /><path d="M4 8.5h12" /></S>
+);
+export const IcCard = (p: IcProps) => (
+  <S {...p}><rect x="3.5" y="5.5" width="17" height="13" rx="2.5" /><path d="M3.5 10h17" /><path d="M7 15h4" /></S>
+);
+export const IcReceipt = (p: IcProps) => (
+  <S {...p}><path d="M6 3.5h12V20l-2.4-1.6L13.2 20l-2.4-1.6L8.4 20 6 18.4V3.5z" /><path d="M9 8h6M9 11.5h6M9 15h3.5" /></S>
+);
+export const IcActivity = (p: IcProps) => (
+  <S {...p}><path d="M3.5 12h4l2.5-6.5 4 13L16.5 12h4" /></S>
+);
+export const IcSettings = (p: IcProps) => (
+  <S {...p}><circle cx="12" cy="12" r="3" /><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M18 6l-1.6 1.6M7.6 16.4L6 18" /></S>
+);
+export const IcRefresh = (p: IcProps) => (
+  <S {...p}><path d="M20 12a8 8 0 11-2.3-5.6" /><path d="M20 3.5V8h-4.5" /></S>
+);
+export const IcAlert = (p: IcProps) => (
+  <S {...p}><path d="M12 4L2.8 19.5h18.4L12 4z" /><path d="M12 10v4M12 16.8v.4" /></S>
+);
+export const IcLock = (p: IcProps) => (
+  <S {...p}><rect x="5.5" y="10.5" width="13" height="9.5" rx="2" /><path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5" /></S>
+);
+export const IcPlus = (p: IcProps) => (
+  <S {...p}><path d="M12 5v14M5 12h14" /></S>
+);
+export const IcMinus = (p: IcProps) => (
+  <S {...p}><path d="M5 12h14" /></S>
+);
+export const IcServer = (p: IcProps) => (
+  <S {...p}><rect x="4" y="4.5" width="16" height="6" rx="1.5" /><rect x="4" y="13.5" width="16" height="6" rx="1.5" /><path d="M7.5 7.5h.01M7.5 16.5h.01" /></S>
+);
+export const IcSignal = (p: IcProps) => (
+  <S {...p}><path d="M4 19.5v-3M9 19.5v-6.5M14 19.5V9M19 19.5V4.5" /></S>
+);
+export const IcEye = (p: IcProps) => (
+  <S {...p}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></S>
+);
+export const IcEyeOff = (p: IcProps) => (
+  <S {...p}><path d="M4 4l16 16" /><path d="M9.9 5.9A9.4 9.4 0 0112 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 01-3.2 3.9M6 8.2A16 16 0 002.5 12S6 18.5 12 18.5a9 9 0 003.5-.7" /></S>
+);
+export const IcSend = (p: IcProps) => (
+  <S {...p}><path d="M20.5 3.5L3.5 10l6 2.5 2.5 6 8.5-15z" /><path d="M9.5 12.5l11-9" /></S>
+);
+export const IcChevD = (p: IcProps) => (
+  <S {...p}><path d="M6 9.5l6 6 6-6" /></S>
+);
+export const IcHistory = (p: IcProps) => (
+  <S {...p}><path d="M4 6v4h4" /><path d="M4.5 10A8 8 0 1112 20a8 8 0 01-7.4-5" /><path d="M12 8v4.5l3 2" /></S>
+);
+export const IcPower = (p: IcProps) => (
+  <S {...p}><path d="M12 3.5V11" /><path d="M7 6.5a7.5 7.5 0 1010 0" /></S>
+);
+export const IcTg = (p: IcProps) => (
+  <S {...p}><path d="M20.5 4.5L3.5 11.2l5.4 2 2 5.8 3-3.6 4.6 3.1 2-14z" /><path d="M8.9 13.2l9.6-6.9" /></S>
+);
+export const IcSpark = (p: IcProps) => (
+  <S {...p}><path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8L12 3.5z" /><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" /></S>
+);
+export const IcFile = (p: IcProps) => (
+  <S {...p}><path d="M6 3.5h8L19 8.5v12H6V3.5z" /><path d="M13.5 3.5v5.5H19" /></S>
+);
+
+/* ============================= PRIMITIVES ============================= */
+
+export function Reveal({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            el.classList.add("rv-in");
+            io.disconnect();
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   return (
-    <button
-      type="button"
-      disabled={disabled || busy}
-      onClick={onClick}
-      className={`${base} ${styles[variant]} ${full ? "w-full" : ""} ${className}`}
-    >
-      {busy && <Spinner className="h-4 w-4" dark={variant === "primary" || variant === "gold"} />}
+    <div ref={ref} className={`rv ${className}`} style={{ transitionDelay: `${delay}ms` }}>
       {children}
-    </button>
+    </div>
   );
 }
 
-export function Spinner({ className = "h-5 w-5", dark = false }: { className?: string; dark?: boolean }) {
+export function SectionHead({ title, sub, icon }: { title: string; sub?: string; icon?: React.ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={`${className} ${dark ? "text-deep-900/40" : "text-white/25"}`}>
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" />
-      <path
-        d="M21 12a9 9 0 0 0-9-9"
-        stroke={dark ? "#06141a" : "#46dca8"}
-        strokeWidth="3"
-        strokeLinecap="round"
-        className="origin-center animate-spin"
-        style={{ animationDuration: "0.8s" }}
-      />
-    </svg>
+    <div className="flex items-center gap-3 mt-7 mb-3.5">
+      {icon && <span className="text-gold-400">{icon}</span>}
+      <h2 className="font-display text-[1.45rem] leading-7 text-mist-100">{title}</h2>
+      <span className="flex-1 h-px bg-gradient-to-l from-transparent via-mint-400/25 to-transparent" />
+      {sub && <span className="text-[0.68rem] text-mist-500 font-medium">{sub}</span>}
+    </div>
   );
 }
 
-/* ---------------------------------- Chips ---------------------------------- */
+export type Tone = "gold" | "mint" | "coral" | "sky" | "mist";
 
-export type Tone = "mint" | "gold" | "coral" | "mist" | "sky";
-
-const toneCls: Record<Tone, string> = {
-  mint: "border-mint-500/30 bg-mint-500/12 text-mint-300",
-  gold: "border-gold-400/30 bg-gold-400/12 text-gold-300",
-  coral: "border-coral-500/30 bg-coral-500/12 text-coral-300",
-  mist: "border-white/12 bg-white/[0.05] text-mist-300",
-  sky: "border-sky-350/30 bg-sky-350/12 text-sky-350",
+const chipTones: Record<Tone, string> = {
+  gold: "bg-gold-500/12 text-gold-300 border-gold-500/30",
+  mint: "bg-mint-500/12 text-mint-300 border-mint-500/30",
+  coral: "bg-coral-500/12 text-coral-300 border-coral-500/30",
+  sky: "bg-sky-350/12 text-sky-350 border-sky-350/30",
+  mist: "bg-mist-300/8 text-mist-400 border-mist-300/15",
 };
 
-export function Chip({ tone = "mist", className = "", children }: { tone?: Tone; className?: string; children: ReactNode }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${toneCls[tone]} ${className}`}
-    >
-      {children}
-    </span>
-  );
+export function Chip({ tone = "mist", children, className = "" }: { tone?: Tone; children: React.ReactNode; className?: string }) {
+  return <span className={`chip border ${chipTones[tone]} ${className}`}>{children}</span>;
 }
 
-export const ORDER_STATUS: Record<OrderStatus, { label: string; tone: Tone }> = {
-  pending_payment: { label: "در انتظار پرداخت", tone: "gold" },
-  awaiting_approval: { label: "در انتظار تأیید مدیر", tone: "gold" },
-  paid: { label: "پرداخت شده", tone: "sky" },
-  provisioning: { label: "در حال پروویژن", tone: "sky" },
-  done: { label: "فعال شد", tone: "mint" },
-  failed: { label: "شکست امن", tone: "coral" },
-  rejected: { label: "رد شده", tone: "coral" },
-};
-
-export const PAY_STATUS: Record<PaymentStatus, { label: string; tone: Tone }> = {
-  pending: { label: "در انتظار", tone: "gold" },
-  approved: { label: "تأیید شده", tone: "mint" },
-  rejected: { label: "رد شده", tone: "coral" },
-};
-
-export const PARTNER_STATUS: Record<PartnerStatus, { label: string; tone: Tone }> = {
-  pending: { label: "در انتظار تأیید", tone: "gold" },
+export const orderTone: Record<OrderStatus, { label: string; tone: Tone }> = {
+  awaiting_payment: { label: "در انتظار تأیید فیش", tone: "gold" },
+  provisioning: { label: "در حال ساخت اکانت", tone: "sky" },
   active: { label: "فعال", tone: "mint" },
-  suspended: { label: "تعلیق شده", tone: "coral" },
+  failed: { label: "ناموفق", tone: "coral" },
 };
 
-export function LiveDot({ className = "" }: { className?: string }) {
-  return <span className={`anim-pulse-dot inline-block h-2 w-2 rounded-full bg-mint-400 ${className}`} />;
-}
+export const payTone: Record<PaymentStatus, { label: string; tone: Tone }> = {
+  pending: { label: "در انتظار بررسی", tone: "gold" },
+  confirmed: { label: "تأیید شده", tone: "mint" },
+  rejected: { label: "رد شده", tone: "coral" },
+};
 
-/* ------------------------------- Usage meter ------------------------------- */
-
-export function UsageBar({ used, quota, capped }: { used: number; quota: number; capped: boolean }) {
-  const p = pct(used, quota);
-  const color = capped ? "bg-coral-500" : p > 85 ? "bg-gold-400" : "bg-gradient-to-l from-mint-400 to-mint-600";
-  return (
-    <div className="h-2.5 w-full overflow-hidden rounded-full bg-deep-950/80 ring-1 ring-white/[0.06]">
-      <div
-        className={`relative h-full rounded-full transition-[width] duration-1000 ease-out ${color}`}
-        style={{ width: `${p}%` }}
-      >
-        {!capped && (
-          <div
-            className="anim-stripes absolute inset-0 opacity-25"
-            style={{
-              backgroundImage:
-                "repeating-linear-gradient(45deg, rgba(255,255,255,0.9) 0 6px, transparent 6px 12px)",
-              backgroundSize: "24px 24px",
-            }}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------------- Stepper --------------------------------- */
-
-export function Stepper({
-  value,
-  min = 1,
-  max = 10,
-  onChange,
-}: {
-  value: number;
-  min?: number;
-  max?: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="inline-flex items-center gap-1 rounded-xl border border-white/12 bg-deep-800/80 p-1">
-      <button
-        type="button"
-        onClick={() => onChange(Math.max(min, value - 1))}
-        className="grid h-8 w-8 place-items-center rounded-lg text-mist-300 transition hover:bg-deep-700 hover:text-mist-100 active:scale-90"
-        aria-label="کم کردن"
-      >
-        <IcMinus className="h-4 w-4" />
-      </button>
-      <span className="w-9 text-center text-base font-extrabold tabular-nums">{value}</span>
-      <button
-        type="button"
-        onClick={() => onChange(Math.min(max, value + 1))}
-        className="grid h-8 w-8 place-items-center rounded-lg text-mist-300 transition hover:bg-deep-700 hover:text-mist-100 active:scale-90"
-        aria-label="زیاد کردن"
-      >
-        <IcPlus className="h-4 w-4" />
-      </button>
-    </div>
-  );
-}
-
-/* ------------------------------ Segmented tabs ------------------------------ */
-
-export function Seg<T extends string>({
-  options,
-  value,
-  onChange,
-  size = "md",
-}: {
-  options: { id: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-  size?: "sm" | "md";
-}) {
-  return (
-    <div className={`inline-flex w-full gap-1 rounded-xl border border-white/[0.08] bg-deep-900/80 p-1 ${size === "sm" ? "text-[11px]" : "text-xs"}`}>
-      {options.map((o) => (
-        <button
-          key={o.id}
-          type="button"
-          onClick={() => onChange(o.id)}
-          className={`flex-1 rounded-lg px-2 font-bold transition-all duration-200 ${size === "sm" ? "py-1.5" : "py-2"} ${
-            value === o.id
-              ? "bg-deep-700 text-mint-300 shadow-[inset_0_0_0_1px_rgba(70,220,168,0.25)]"
-              : "text-mist-500 hover:text-mist-300"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/* --------------------------------- Toggle ---------------------------------- */
-
-export function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <button
       type="button"
-      disabled={disabled}
-      onClick={() => onChange(!on)}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-40 ${
-        on ? "bg-mint-500" : "bg-deep-600"
-      }`}
+      onClick={() => {
+        haptic("tap");
+        onChange(!on);
+      }}
+      className="flex items-center gap-2.5 cursor-pointer select-none group"
       aria-pressed={on}
     >
-      <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-mist-100 shadow transition-all duration-200 ${
-          on ? "right-[22px]" : "right-0.5"
-        }`}
-      />
+      <span className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${on ? "bg-mint-500/80" : "bg-deep-600"}`}>
+        <span
+          className={`absolute top-0.5 w-5 h-5 rounded-full bg-mist-100 shadow transition-all duration-300 ${on ? "right-[22px]" : "right-0.5"}`}
+        />
+      </span>
+      {label && <span className="text-sm text-mist-200 group-hover:text-mist-100 transition-colors">{label}</span>}
     </button>
   );
 }
 
-/* --------------------------------- CopyBtn --------------------------------- */
+export function Stepper({ value, onChange, min = 1, max = 10 }: { value: number; onChange: (v: number) => void; min?: number; max?: number }) {
+  return (
+    <div className="flex items-center gap-1.5" dir="ltr">
+      <button type="button" className="btn btn-ghost w-9 h-9" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} aria-label="کاهش">
+        <IcMinus className="w-4 h-4" />
+      </button>
+      <span className="w-11 text-center font-display text-xl text-mist-100 tabular">{value.toLocaleString("fa-IR")}</span>
+      <button type="button" className="btn btn-ghost w-9 h-9" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} aria-label="افزایش">
+        <IcPlus className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
 
-export function CopyBtn({ text, label = "کپی" }: { text: string; label?: string }) {
+export function CopyBtn({ text, label }: { text: string; label?: string }) {
   const [done, setDone] = useState(false);
-  const t = useRef<number | null>(null);
-  useEffect(() => () => { if (t.current) window.clearTimeout(t.current); }, []);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-    }
-    setDone(true);
-    if (t.current) window.clearTimeout(t.current);
-    t.current = window.setTimeout(() => setDone(false), 1600);
-  };
   return (
     <button
       type="button"
-      onClick={copy}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-all active:scale-95 ${
-        done
-          ? "border-mint-500/40 bg-mint-500/15 text-mint-300"
-          : "border-white/12 bg-white/[0.05] text-mist-300 hover:border-mint-500/40 hover:text-mint-300"
-      }`}
+      className="btn btn-ghost px-2.5 py-1.5 text-xs"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+        }
+        haptic("ok");
+        setDone(true);
+        setTimeout(() => setDone(false), 1600);
+      }}
     >
-      {done ? <IcCheck className="h-3.5 w-3.5" /> : <IcCopy className="h-3.5 w-3.5" />}
-      {done ? "کپی شد" : label}
+      {done ? <IcCheck className="w-3.5 h-3.5 text-mint-400" /> : <IcCopy className="w-3.5 h-3.5" />}
+      {label && <span>{done ? "کپی شد" : label}</span>}
     </button>
   );
 }
 
-/* ---------------------------------- Field ---------------------------------- */
-
-export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
-  return (
-    <div>
-      <span className="lbl">{label}</span>
-      {children}
-      {hint && <p className="mt-1 text-[10.5px] leading-5 text-mist-500">{hint}</p>}
-    </div>
-  );
-}
-
-/* -------------------------------- EmptyState ------------------------------- */
-
-export function EmptyState({ icon, title, sub }: { icon: ReactNode; title: string; sub?: string }) {
-  return (
-    <div className="anim-fade flex flex-col items-center gap-2 rounded-xl border border-dashed border-white/10 bg-deep-900/50 px-6 py-10 text-center">
-      <div className="grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-deep-800 text-mist-500">
-        {icon}
-      </div>
-      <p className="text-sm font-bold text-mist-300">{title}</p>
-      {sub && <p className="max-w-[240px] text-xs leading-6 text-mist-500">{sub}</p>}
-    </div>
-  );
-}
-
-/* ---------------------------------- Sheet ---------------------------------- */
-
-export function Sheet({
-  open,
-  onClose,
-  title,
-  children,
-  locked = false,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title?: ReactNode;
-  children: ReactNode;
-  locked?: boolean;
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !locked) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, locked]);
-
-  if (!open) return null;
-  return (
-    <div className="absolute inset-0 z-40 flex flex-col justify-end">
-      <button
-        type="button"
-        aria-label="بستن"
-        onClick={() => !locked && onClose()}
-        className="anim-fade absolute inset-0 bg-deep-950/75 backdrop-blur-[3px]"
-      />
-      <div className="anim-sheet relative flex max-h-[88%] flex-col rounded-t-3xl border border-b-0 border-white/10 bg-deep-850 shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.8)]">
-        <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-3.5">
-          <div className="mx-auto absolute right-1/2 top-1.5 h-1 w-10 translate-x-1/2 rounded-full bg-white/15" />
-          <h3 className="font-display text-lg text-mist-100">{title}</h3>
-          {!locked && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-mist-500 transition hover:border-coral-500/40 hover:text-coral-300 active:scale-90"
-              aria-label="بستن پنل"
-            >
-              <IcX className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------- ConfirmBtn -------------------------------- */
-
+/** دکمه با تأیید دومرحله‌ای برای عملیات حساس */
 export function ConfirmBtn({
-  label,
-  confirmLabel = "مطمئنم؟",
   onConfirm,
-  variant = "danger",
-  className = "",
+  children,
+  confirmLabel = "مطمئن هستید؟",
+  className = "btn btn-coral px-3 py-1.5 text-xs",
+  busy = false,
 }: {
-  label: ReactNode;
-  confirmLabel?: string;
   onConfirm: () => void;
-  variant?: BtnVariant;
+  children: React.ReactNode;
+  confirmLabel?: string;
   className?: string;
+  busy?: boolean;
 }) {
-  const [armed, setArmed] = useState(false);
+  const [arm, setArm] = useState(false);
   useEffect(() => {
-    if (!armed) return;
-    const t = window.setTimeout(() => setArmed(false), 2600);
-    return () => window.clearTimeout(t);
-  }, [armed]);
+    if (!arm) return;
+    const t = setTimeout(() => setArm(false), 3000);
+    return () => clearTimeout(t);
+  }, [arm]);
   return (
-    <Btn
-      variant={armed ? "danger" : variant}
-      full={false}
-      className={className}
+    <button
+      type="button"
+      disabled={busy}
+      className={`${className} ${arm ? "!bg-coral-500/25 !border-coral-400 !text-coral-300" : ""}`}
       onClick={() => {
-        if (armed) {
-          setArmed(false);
+        haptic("tap");
+        if (!arm) setArm(true);
+        else {
+          setArm(false);
           onConfirm();
-        } else setArmed(true);
+        }
       }}
     >
-      {armed ? confirmLabel : label}
-    </Btn>
+      {busy ? "…" : arm ? confirmLabel : children}
+    </button>
+  );
+}
+
+/* ============================= RING GAUGE ============================= */
+
+export function Ring({
+  value,
+  size = 172,
+  stroke = 13,
+  tone = "mint",
+  children,
+}: {
+  value: number; // 0..1
+  size?: number;
+  stroke?: number;
+  tone?: "mint" | "gold" | "coral";
+  children?: React.ReactNode;
+}) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const [off, setOff] = useState(c);
+  useEffect(() => {
+    const t = setTimeout(() => setOff(c * (1 - Math.max(0, Math.min(1, value)))), 80);
+    return () => clearTimeout(t);
+  }, [value, c]);
+  const color = tone === "mint" ? "#46dca8" : tone === "gold" ? "#f6bd5a" : "#f58a80";
+  return (
+    <div className="relative inline-block" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(127,232,198,0.1)" strokeWidth={stroke} fill="none" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={c}
+          strokeDashoffset={off}
+          style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(0.25,0.7,0.2,1), stroke 0.4s", filter: `drop-shadow(0 0 8px ${color}55)` }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">{children}</div>
+    </div>
+  );
+}
+
+/* ============================= MODAL (bottom sheet) ============================= */
+
+export function Modal({ open, onClose, children, tall = false }: { open: boolean; onClose: () => void; children: React.ReactNode; tall?: boolean }) {
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-deep-950/75 backdrop-blur-[3px]" onClick={onClose} />
+      <div
+        className={`anim-sheet relative w-full sm:max-w-md bg-deep-850 border border-mint-400/15 sm:rounded-xl rounded-t-xl shadow-2xl shadow-black/60 ${tall ? "max-h-[92dvh]" : "max-h-[86dvh]"} overflow-y-auto`}
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="sticky top-0 z-10 flex justify-center pt-2.5 pb-1 bg-gradient-to-b from-deep-850 via-deep-850/95 to-transparent">
+          <span className="w-10 h-1 rounded-full bg-deep-500" />
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ============================= EMPTY STATE ============================= */
+
+export function Empty({ icon, title, sub }: { icon?: React.ReactNode; title: string; sub?: string }) {
+  return (
+    <div className="card px-6 py-10 text-center">
+      <div className="mx-auto w-14 h-14 rounded-full bg-deep-700/60 border border-mint-400/10 flex items-center justify-center text-mist-500 mb-3">
+        {icon ?? <IcFile className="w-6 h-6" />}
+      </div>
+      <p className="font-display text-lg text-mist-200">{title}</p>
+      {sub && <p className="text-xs text-mist-500 mt-1 leading-5">{sub}</p>}
+    </div>
   );
 }
