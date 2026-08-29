@@ -373,6 +373,25 @@ export default function TestLab() {
           <Cmd label="۵) تلگرام: BotFather → /mybots → Bot Settings → Menu Button" code={"Configure Menu Button → https://app.yourdomain.com\nعنوان: VAR VPN — سپس t.me/YOUR_BOT را باز کنید"} />
           <Cmd label="۶) آپدیت‌های بعدی: فقط این (یا scripts/deploy.sh)" code={"cd /opt/var-vpn && ./scripts/deploy.sh"} />
         </div>
+
+        {/* بدون دامنه و SSL — راه‌حل رایگان */}
+        <div className="card !border-sky-350/30 px-4 py-3.5 mt-3">
+          <p className="text-sm font-bold text-sky-350 flex items-center gap-2 mb-2">
+            <IcLock className="w-4 h-4" />
+            دامنه و SSL نداری؟ راه‌حل کاملاً رایگان
+          </p>
+          <p className="text-[0.68rem] leading-6 text-mist-400 mb-2.5">
+            تلگرام برای بازکردن مینی‌اپ حتماً <b className="text-mist-200">HTTPS</b> می‌خواهد. با <b className="text-sky-350">DuckDNS</b> یک زیردامنه رایگان و با{" "}
+            <b className="text-sky-350">Let's Encrypt</b> گواهی SSL رایگان می‌گیری — بدون خرید دامنه:
+          </p>
+          <div className="space-y-2">
+            <Cmd label="الف) ساخت زیردامنه رایگان در duckdns.org (با اکانت گوگل/گیت‌هاب)" code={"# بعد از ساخت myvpn.duckdns.org، روی سرور:\necho 'YOUR_DUCKDNS_TOKEN' > ~/duck.token"} />
+            <Cmd label="ب) آپدیت خودکار IP (هر ۵ دقیقه — cron)" code={"crontab -e\n# این خط را اضافه کن:\n*/5 * * * * curl \"https://www.duckdns.org/update?domains=myvpn&token=$(cat ~/duck.token)&ip=\" >/dev/null 2>&1"} />
+            <Cmd label="ج) دریافت SSL رایگان برای همان زیردامنه" code={"sudo certbot certonly --standalone -d myvpn.duckdns.org\n# یا با nginx:  sudo certbot --nginx -d myvpn.duckdns.org"} />
+            <Cmd label="د) در BotFather → Menu Button آدرس https را بگذار" code={"https://myvpn.duckdns.org"} />
+          </div>
+        </div>
+
         <div className="card !border-coral-500/30 px-4 py-3 mt-3 flex gap-2.5">
           <IcAlert className="w-4 h-4 text-coral-300 shrink-0 mt-0.5" />
           <p className="text-[0.68rem] leading-5 text-mist-400">

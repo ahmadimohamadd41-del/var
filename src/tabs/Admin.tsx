@@ -3,15 +3,17 @@ import { useStore } from "../lib/store";
 import { agoFa, fa, ltrDigits, maskCard, money, timeFa, dateFa } from "../lib/format";
 import type { AuditKind } from "../lib/types";
 import {
-  Chip, ConfirmBtn, Empty, IcActivity, IcAlert, IcCard, IcCheck, IcHistory, IcLock, IcMinus, IcPlus,
-  IcReceipt, IcRefresh, IcServer, IcSettings, IcShield, IcUsers, IcWallet, IcX, Reveal, SectionHead, Toggle, payTone,
+  Chip, ConfirmBtn, Empty, IcActivity, IcAlert, IcBolt, IcCard, IcCheck, IcHistory, IcLock, IcMinus, IcPlus,
+  IcReceipt, IcRefresh, IcServer, IcSettings, IcShield, IcSpark, IcUsers, IcWallet, IcX, Reveal, SectionHead, Toggle, payTone,
 } from "../components/ui";
+import type { CardConfig, PaymentGateway, Product } from "../lib/types";
 
-type Section = "health" | "payments" | "partners" | "wallet" | "products" | "settings" | "audit";
+type Section = "health" | "payments" | "paymethods" | "partners" | "wallet" | "products" | "settings" | "audit";
 
 const SECTIONS: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: "health", label: "سلامت", icon: <IcActivity className="w-4 h-4" /> },
   { id: "payments", label: "پرداخت‌ها", icon: <IcReceipt className="w-4 h-4" /> },
+  { id: "paymethods", label: "روش‌های پرداخت", icon: <IcBolt className="w-4 h-4" /> },
   { id: "partners", label: "همکاران", icon: <IcUsers className="w-4 h-4" /> },
   { id: "wallet", label: "کیف پول", icon: <IcWallet className="w-4 h-4" /> },
   { id: "products", label: "محصولات", icon: <IcCard className="w-4 h-4" /> },
@@ -60,6 +62,7 @@ export default function Admin() {
       <div key={sec} className="anim-fade-up mt-4">
         {sec === "health" && <HealthSec />}
         {sec === "payments" && <PaymentsSec />}
+        {sec === "paymethods" && <PayMethodsSec />}
         {sec === "partners" && <PartnersSec />}
         {sec === "wallet" && <WalletSec />}
         {sec === "products" && <ProductsSec />}
@@ -403,29 +406,93 @@ function WalletSec() {
 }
 
 /* ================= محصولات ================= */
+const BLANK_PRODUCT: Product = { id: "", name: "", quotaGb: 10, durationDays: 30, price: 100_000, groupId: "", active: true, popular: false };
+
 function ProductsSec() {
   const { state, api, toast } = useStore();
-  const [prices, setPrices] = useState<Record<string, string>>(() => Object.fromEntries(state.products.map((p) => [p.id, String(p.price)])));
+  const [form, setForm] = useState<Product | null>(null); // null = list mode
 
-  const save = async (id: string) => {
-    const v = Math.abs(parseInt(ltrDigits(prices[id] ?? "").replace(/[^\d]/g, ""), 10) || 0);
-    if (v <= 0) return toast("قیمت معتبر وارد کنید", "err");
-    await api.updateProduct(id, { price: v });
-    toast("قیمت ذخیره شد", "ok");
+  const set = <K extends keyof Product>(k: K, v: Product[K]) => setForm((s) => (s ? { ...s, [k]: v } : s));
+
+  const num = (v: string) => Math.max(0, parseInt(ltrDigits(v).replace(/[^\d]/g, ""), 10) || 0);
+
+  const submit = async () => {
+    if (!form) return;
+    const res = await api.saveProduct({ ...form, quotaGb: num(String(form.quotaGb)), durationDays: num(String(form.durationDays)), price: num(String(form.price)) });
+    if (!res.ok) return toast(res.error ?? "خطا در ذخیره", "err");
+    toast(form.id ? "محصول ویرایش شد" : "محصول جدید اضافه شد", "ok");
+    setForm(null);
   };
+
+  if (form) {
+    const groupOk = form.groupId && state.availableGroups.includes(form.groupId);
+    return (
+      <div className="card px-4 py-4 space-y-3.5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-bold text-gold-300 flex items-center gap-2">
+            <IcSpark className="w-4 h-4" /> {form.id ? "ویرایش محصول" : "محصول جدید"}
+          </p>
+          <button className="btn btn-ghost w-8 h-8" onClick={() => setForm(null)} aria-label="انصراف">
+            <IcX className="w-4 h-4" />
+          </button>
+        </div>
+        <Field label="نام محصول">
+          <input className="input" placeholder="مثلاً: ۳۰ گیگابایت" value={form.name} onChange={(e) => set("name", e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="سهمیه (گیگابایت)">
+            <input className="input num-input" inputMode="numeric" value={String(form.quotaGb)} onChange={(e) => set("quotaGb", e.target.value as never)} />
+          </Field>
+          <Field label="مدت (روز)">
+            <input className="input num-input" inputMode="numeric" value={String(form.durationDays)} onChange={(e) => set("durationDays", e.target.value as never)} />
+          </Field>
+        </div>
+        <Field label="قیمت (تومان)">
+          <input className="input num-input" inputMode="numeric" value={String(form.price)} onChange={(e) => set("price", e.target.value as never)} />
+        </Field>
+        <Field label="گروه RADIUS (فقط سهمیه ترافیک)">
+          <input className="input" dir="ltr" placeholder="مثلاً: G30" value={form.groupId} onChange={(e) => set("groupId", e.target.value.toUpperCase())} />
+          <span className={`text-[0.65rem] mt-1 block ${groupOk ? "text-mint-400" : "text-gold-300"}`}>
+            {groupOk ? "✓ این گروه در FreeRADIUS موجود است" : "⚠ این گروه هنوز در FreeRADIUS نیست — باید توسط ادمین سرور ساخته شود"}
+          </span>
+        </Field>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-mist-400">پیشنهادی (نشان «پرفروش» در فروشگاه)</p>
+          <Toggle on={!!form.popular} onChange={(v) => set("popular", v)} />
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-mist-400">فعال در فروشگاه</p>
+          <Toggle on={form.active} onChange={(v) => set("active", v)} />
+        </div>
+        <button className="btn btn-gold w-full py-3" onClick={submit}>
+          ذخیره محصول
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
+      <button className="btn btn-mint w-full py-3" onClick={() => setForm({ ...BLANK_PRODUCT })}>
+        <IcPlus className="w-4 h-4" />
+        افزودن محصول جدید
+      </button>
+
       {state.products.map((p) => {
         const groupOk = state.availableGroups.includes(p.groupId);
         return (
-          <div key={p.id} className={`card px-4 py-4 ${!p.active ? "opacity-60" : ""}`}>
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="font-display text-lg text-mist-100">اشتراک {p.name} <span className="text-mist-500 text-sm">/ {fa(p.durationDays)} روزه</span></p>
-                <div className="flex items-center gap-2 mt-1.5">
+          <div key={p.id} className={`card px-4 py-4 ${!p.active ? "opacity-55" : ""}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-display text-lg text-mist-100 flex items-center gap-2 flex-wrap">
+                  اشتراک {p.name}
+                  <span className="text-mist-500 text-sm">/ {fa(p.durationDays)} روزه</span>
+                  {p.popular && <Chip tone="gold">پیشنهادی</Chip>}
+                </p>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <Chip tone={groupOk ? "mint" : "coral"}>گروه {p.groupId} {groupOk ? "موجود" : "ناموجود!"}</Chip>
-                  <Chip tone="mist">فقط سهمیه ترافیک</Chip>
+                  <Chip tone="mist">{fa(p.quotaGb)} گیگابایت</Chip>
+                  <Chip tone="sky">{money(p.price)}</Chip>
                 </div>
               </div>
               <Toggle
@@ -437,16 +504,23 @@ function ProductsSec() {
               />
             </div>
             <div className="flex items-center gap-2 mt-3.5">
-              <input
-                className="input num-input flex-1"
-                inputMode="numeric"
-                value={prices[p.id] ?? ""}
-                onChange={(e) => setPrices((s) => ({ ...s, [p.id]: e.target.value }))}
-              />
-              <span className="text-xs text-mist-500 shrink-0">تومان</span>
-              <button className="btn btn-ghost px-4 py-2.5 text-xs" onClick={() => save(p.id)}>
-                ذخیره قیمت
+              <button
+                className="btn btn-ghost px-3.5 py-2 text-xs"
+                onClick={() => {
+                  api.updateProduct(p.id, { popular: !p.popular }).then(() => toast(!p.popular ? "به‌عنوان پیشنهادی علامت خورد" : "از پیشنهادی‌ها حذف شد", "info"));
+                }}
+              >
+                <IcSpark className="w-3.5 h-3.5" />
+                {p.popular ? "حذف از پیشنهادی" : "پیشنهادی کن"}
               </button>
+              <button className="btn btn-ghost px-3.5 py-2 text-xs" onClick={() => setForm({ ...p })}>
+                ویرایش
+              </button>
+              <span className="flex-1" />
+              <ConfirmBtn onConfirm={() => api.deleteProduct(p.id).then((r) => toast(r.ok ? "محصول حذف شد" : r.error ?? "حذف ناموفق", r.ok ? "ok" : "err"))} confirmLabel="حذف شود؟">
+                <IcX className="w-3.5 h-3.5" />
+                حذف
+              </ConfirmBtn>
             </div>
             {!groupOk && (
               <p className="text-[0.68rem] text-coral-300 mt-2.5 leading-5 flex gap-1.5">
@@ -458,7 +532,190 @@ function ProductsSec() {
         );
       })}
       <p className="text-[0.68rem] text-mist-600 leading-6">
-        تغییر حجم/مدت محصول = نیاز به گروه RADIUS جدید و هماهنگی با ادمین سرور. در MVP فقط قیمت و فعال/غیرفعال از اینجا مدیریت می‌شود.
+        هر محصول به یک گروه RADIUS متصل است. گروه‌های جدید باید توسط ادمین سرور (با بکاپ و تأیید) در FreeRADIUS ساخته شوند — این اپ گروه خودکار نمی‌سازد.
+      </p>
+    </div>
+  );
+}
+
+/* ================= روش‌های پرداخت (درگاه‌ها + کارت‌ها) ================= */
+const PROVIDERS = [
+  { id: "zarinpal", label: "زرین‌پال" },
+  { id: "idpay", label: "آیدی‌پی" },
+  { id: "nextpay", label: "نکست‌پی" },
+  { id: "sepehr", label: "سپهر" },
+  { id: "custom", label: "سفارشی" },
+];
+
+const BLANK_GATEWAY: PaymentGateway = { id: "", name: "", provider: "zarinpal", merchantId: "", enabled: true };
+const BLANK_CARD: CardConfig = { id: "", number: "", holder: "", enabled: true };
+
+function PayMethodsSec() {
+  const { state, api, toast } = useStore();
+  const [gwForm, setGwForm] = useState<PaymentGateway | null>(null);
+  const [cardForm, setCardForm] = useState<CardConfig | null>(null);
+
+  const maskMerchant = (id: string) => (id.length > 8 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id || "—");
+
+  return (
+    <div className="space-y-6">
+      {/* ---------- درگاه‌های پرداخت ---------- */}
+      <div>
+        <div className="flex items-center justify-between mb-2.5">
+          <p className="text-xs font-bold text-gold-300 flex items-center gap-2">
+            <IcBolt className="w-4 h-4" /> درگاه‌های پرداخت آنلاین
+          </p>
+          {!gwForm && (
+            <button className="btn btn-mint px-3 py-1.5 text-xs" onClick={() => setGwForm({ ...BLANK_GATEWAY })}>
+              <IcPlus className="w-3.5 h-3.5" /> افزودن درگاه
+            </button>
+          )}
+        </div>
+
+        {gwForm && (
+          <div className="card !border-gold-400/40 px-4 py-4 mb-3 space-y-3 anim-fade-up">
+            <Field label="نام نمایشی">
+              <input className="input" placeholder="مثلاً: زرین‌پال" value={gwForm.name} onChange={(e) => setGwForm({ ...gwForm, name: e.target.value })} />
+            </Field>
+            <div>
+              <span className="text-xs font-bold text-mist-400 block mb-1.5">ارائه‌دهنده</span>
+              <div className="flex gap-1.5 flex-wrap">
+                {PROVIDERS.map((pr) => (
+                  <button
+                    key={pr.id}
+                    type="button"
+                    onClick={() => setGwForm({ ...gwForm, provider: pr.id })}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                      gwForm.provider === pr.id ? "border-gold-400/70 bg-gold-500/12 text-gold-300" : "border-mint-400/12 bg-deep-900/60 text-mist-400"
+                    }`}
+                  >
+                    {pr.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Field label="کد مرچنت / API Key (فقط سمت سرور نگهداری می‌شود)">
+              <input className="input" dir="ltr" placeholder="xxxxxxxx-xxxx-…" value={gwForm.merchantId} onChange={(e) => setGwForm({ ...gwForm, merchantId: e.target.value })} />
+            </Field>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-mist-400">فعال</p>
+              <Toggle on={gwForm.enabled} onChange={(v) => setGwForm({ ...gwForm, enabled: v })} />
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="btn btn-gold flex-1 py-2.5 text-sm"
+                onClick={async () => {
+                  const r = await api.saveGateway(gwForm);
+                  if (!r.ok) return toast(r.error ?? "خطا", "err");
+                  toast(gwForm.id ? "درگاه ویرایش شد" : "درگاه اضافه شد", "ok");
+                  setGwForm(null);
+                }}
+              >
+                ذخیره درگاه
+              </button>
+              <button className="btn btn-ghost px-4 py-2.5 text-sm" onClick={() => setGwForm(null)}>انصراف</button>
+            </div>
+          </div>
+        )}
+
+        {state.gateways.length === 0 && !gwForm && <Empty title="هنوز درگاهی تعریف نشده" sub="اولین درگاه پرداخت را اضافه کنید" />}
+
+        <div className="space-y-2">
+          {state.gateways.map((g) => (
+            <div key={g.id} className={`card px-4 py-3 flex items-center gap-3 ${!g.enabled ? "opacity-55" : ""}`}>
+              <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${g.enabled ? "bg-mint-500/12 text-mint-300" : "bg-deep-700 text-mist-500"}`}>
+                <IcBolt className="w-4.5 h-4.5" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-mist-100">{g.name}</p>
+                <p className="text-[0.65rem] text-mist-500 mt-0.5" dir="ltr">
+                  {PROVIDERS.find((p) => p.id === g.provider)?.label ?? g.provider} • {maskMerchant(g.merchantId)}
+                </p>
+              </div>
+              <Toggle
+                on={g.enabled}
+                onChange={async (v) => {
+                  await api.saveGateway({ ...g, enabled: v });
+                  toast(v ? "درگاه فعال شد" : "درگاه غیرفعال شد", "info");
+                }}
+              />
+              <button className="btn btn-ghost px-2.5 py-1.5 text-xs" onClick={() => setGwForm({ ...g })}>ویرایش</button>
+              <ConfirmBtn onConfirm={() => api.deleteGateway(g.id).then(() => toast("درگاه حذف شد", "ok"))} confirmLabel="حذف؟" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ---------- کارت‌های کارت‌به‌کارت ---------- */}
+      <div>
+        <div className="flex items-center justify-between mb-2.5">
+          <p className="text-xs font-bold text-gold-300 flex items-center gap-2">
+            <IcCard className="w-4 h-4" /> کارت‌های کارت‌به‌کارت
+          </p>
+          {!cardForm && (
+            <button className="btn btn-mint px-3 py-1.5 text-xs" onClick={() => setCardForm({ ...BLANK_CARD })}>
+              <IcPlus className="w-3.5 h-3.5" /> افزودن کارت
+            </button>
+          )}
+        </div>
+
+        {cardForm && (
+          <div className="card !border-gold-400/40 px-4 py-4 mb-3 space-y-3 anim-fade-up">
+            <Field label="شماره کارت (۱۶ رقم)">
+              <input className="input num-input" dir="ltr" placeholder="6274 1290 …" value={cardForm.number} onChange={(e) => setCardForm({ ...cardForm, number: e.target.value })} />
+            </Field>
+            <Field label="به نام">
+              <input className="input" placeholder="نام صاحب کارت" value={cardForm.holder} onChange={(e) => setCardForm({ ...cardForm, holder: e.target.value })} />
+            </Field>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-mist-400">فعال</p>
+              <Toggle on={cardForm.enabled} onChange={(v) => setCardForm({ ...cardForm, enabled: v })} />
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="btn btn-gold flex-1 py-2.5 text-sm"
+                onClick={async () => {
+                  const r = await api.saveCard(cardForm);
+                  if (!r.ok) return toast(r.error ?? "خطا", "err");
+                  toast(cardForm.id ? "کارت ویرایش شد" : "کارت اضافه شد", "ok");
+                  setCardForm(null);
+                }}
+              >
+                ذخیره کارت
+              </button>
+              <button className="btn btn-ghost px-4 py-2.5 text-sm" onClick={() => setCardForm(null)}>انصراف</button>
+            </div>
+          </div>
+        )}
+
+        {state.cards.length === 0 && !cardForm && <Empty title="هنوز کارتی تعریف نشده" sub="حداقل یک کارت برای کارت‌به‌کارت اضافه کنید" />}
+
+        <div className="space-y-2">
+          {state.cards.map((c) => (
+            <div key={c.id} className={`card px-4 py-3 flex items-center gap-3 ${!c.enabled ? "opacity-55" : ""}`}>
+              <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${c.enabled ? "bg-gold-500/12 text-gold-300" : "bg-deep-700 text-mist-500"}`}>
+                <IcCard className="w-4.5 h-4.5" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-mist-100 tabular" dir="ltr">{c.number}</p>
+                <p className="text-[0.65rem] text-mist-500 mt-0.5">به نام {c.holder || "—"}</p>
+              </div>
+              <Toggle
+                on={c.enabled}
+                onChange={async (v) => {
+                  await api.saveCard({ ...c, enabled: v });
+                  toast(v ? "کارت فعال شد" : "کارت غیرفعال شد", "info");
+                }}
+              />
+              <button className="btn btn-ghost px-2.5 py-1.5 text-xs" onClick={() => setCardForm({ ...c })}>ویرایش</button>
+              <ConfirmBtn onConfirm={() => api.deleteCard(c.id).then(() => toast("کارت حذف شد", "ok"))} confirmLabel="حذف؟" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-[0.68rem] text-mist-600 leading-6">
+        مشتری فقط درگاه‌ها و کارت‌های «فعال» را می‌بیند. تغییرات اینجا بلافاصله در صفحه خرید اعمال و در گزارش رویدادها ثبت می‌شود.
       </p>
     </div>
   );
@@ -475,12 +732,9 @@ function SettingsSec() {
   const save = async () => {
     setBusy(true);
     await api.updateSettings({
-      cardNumber: f.cardNumber.trim(),
-      cardHolder: f.cardHolder.trim(),
       supportHandle: f.supportHandle.trim(),
       apiBase: f.apiBase.trim(),
       minPartnerBalance: Math.max(0, Math.abs(parseInt(ltrDigits(String(f.minPartnerBalance)).replace(/[^\d]/g, ""), 10) || 0)),
-      gatewayEnabled: f.gatewayEnabled,
       simulateMissingGroup: f.simulateMissingGroup,
     });
     setBusy(false);
@@ -489,16 +743,6 @@ function SettingsSec() {
 
   return (
     <div className="space-y-3.5">
-      <div className="card px-4 py-4 space-y-3">
-        <p className="text-xs font-bold text-gold-300">کارت‌به‌کارت</p>
-        <Field label="شماره کارت">
-          <input className="input num-input" dir="ltr" value={f.cardNumber} onChange={(e) => set("cardNumber", e.target.value)} />
-        </Field>
-        <Field label="به نام">
-          <input className="input" value={f.cardHolder} onChange={(e) => set("cardHolder", e.target.value)} />
-        </Field>
-      </div>
-
       <div className="card px-4 py-4 space-y-3">
         <p className="text-xs font-bold text-gold-300">همکاران و پشتیبانی</p>
         <Field label="حداقل موجودی کیف پول همکار (تومان)">
@@ -512,15 +756,8 @@ function SettingsSec() {
         </Field>
       </div>
 
-      <div className="card px-4 py-4 space-y-4">
+      <div className="card px-4 py-4">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold text-mist-100">درگاه پرداخت آنلاین</p>
-            <p className="text-[0.68rem] text-mist-500 mt-0.5">در صورت غیرفعال‌بودن، فقط کارت‌به‌کارت و کیف پول ارائه می‌شود</p>
-          </div>
-          <Toggle on={f.gatewayEnabled} onChange={(v) => set("gatewayEnabled", v)} />
-        </div>
-        <div className="border-t border-mint-400/8 pt-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-coral-300">حالت تست: گروه G50 ناموجود</p>
             <p className="text-[0.68rem] text-mist-500 mt-0.5">شبیه‌سازی شکست امن provisioning برای بسته ۵۰ گیگ — بدون نوشتن در RADIUS</p>
@@ -528,6 +765,10 @@ function SettingsSec() {
           <Toggle on={f.simulateMissingGroup} onChange={(v) => set("simulateMissingGroup", v)} />
         </div>
       </div>
+
+      <p className="text-[0.68rem] text-mist-600 leading-6">
+        درگاه‌های پرداخت و کارت‌های کارت‌به‌کارت در بخش «روش‌های پرداخت» مدیریت می‌شوند.
+      </p>
 
       <button className="btn btn-gold w-full py-3.5" disabled={busy} onClick={save}>
         {busy ? "در حال ذخیره…" : "ذخیره تنظیمات"}

@@ -3,8 +3,10 @@ import type {
   Account,
   AppState,
   AuditKind,
+  CardConfig,
   Order,
   Payment,
+  PaymentGateway,
   Product,
   PurchaseInput,
   PurchaseResult,
@@ -22,7 +24,12 @@ function load(): AppState {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw) as AppState;
-      if (s && s.v === SEED_VERSION && Array.isArray(s.users)) return s;
+      if (s && s.v === SEED_VERSION && Array.isArray(s.users)) {
+        // گاردهای دفاعی برای فیلدهای جدید
+        if (!Array.isArray(s.gateways)) s.gateways = [];
+        if (!Array.isArray(s.cards)) s.cards = [];
+        return s;
+      }
     }
   } catch {
     /* state خراب → seed دوباره */
@@ -72,8 +79,17 @@ interface Api {
   confirmPayment: (paymentId: string, approve: boolean) => Promise<{ ok: boolean; already?: boolean; error?: string }>;
   decidePartner: (requestId: string, approve: boolean) => Promise<{ ok: boolean }>;
   walletAdjust: (userId: string, delta: number, reason: string) => Promise<{ ok: boolean; error?: string }>;
-  updateProduct: (id: string, patch: Partial<Pick<Product, "price" | "active">>) => Promise<{ ok: boolean }>;
+  updateProduct: (id: string, patch: Partial<Product>) => Promise<{ ok: boolean }>;
+  /** افزودن یا ویرایش کامل محصول (شامل popular، سهمیه، مدت، گروه و قیمت) */
+  saveProduct: (p: Product) => Promise<{ ok: boolean; error?: string }>;
+  deleteProduct: (id: string) => Promise<{ ok: boolean; error?: string }>;
   updateSettings: (patch: Partial<Settings>) => Promise<{ ok: boolean }>;
+  /** افزودن یا ویرایش درگاه پرداخت */
+  saveGateway: (g: PaymentGateway) => Promise<{ ok: boolean; error?: string }>;
+  deleteGateway: (id: string) => Promise<{ ok: boolean }>;
+  /** افزودن یا ویرایش کارت کارت‌به‌کارت */
+  saveCard: (c: CardConfig) => Promise<{ ok: boolean; error?: string }>;
+  deleteCard: (id: string) => Promise<{ ok: boolean; error?: string }>;
   requestPartner: (note: string) => Promise<{ ok: boolean; error?: string }>;
   healthCheck: () => Promise<{ radiusMs: number; dbMs: number; workerMs: number; serverMs: number; at: number }>;
 }
@@ -245,8 +261,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const total = product.price * qty;
       const method = input.method;
 
-      if (method === "gateway" && !s.settings.gatewayEnabled)
-        return { ok: false, orderId: "", status: "failed", error: "درگاه پرداخت موقتاً غیرفعال است" };
+      if (method === "gateway" && !s.gateways.some((g) => g.enabled))
+        return { ok: false, orderId: "", status: "failed", error: "هیچ درگاه پرداخت فعالی وجود ندارد" };
+
+      if (method === "card" && !s.cards.some((c) => c.enabled))
+        return { ok: false, orderId: "", status: "failed", error: "کارتهای کارت‌به‌کارت موقتاً غیرفعال‌اند" };
 
       if (method === "wallet") {
         const w = s.wallets.find((x) => x.userId === me.id);
@@ -404,6 +423,97 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (patch.price !== undefined) p.price = Math.max(0, Math.round(patch.price));
       if (patch.active !== undefined) p.active = patch.active;
       audit(s, me.name, "ویرایش محصول", `${p.name} — قیمت ${money(p.price)} — ${p.active ? "فعال" : "غیرفعال"}`, "info");
+      commit(s);
+      return { ok: true };
+    },
+
+    /** افزودن یا ویرایش کامل محصول */
+    async saveProduct(p) {
+      await delay(350);
+      const s = clone();
+      const me = s.users.find((u) => u.id === s.currentUserId)!;
+      if (!p.name.trim()) return { ok: false, error: "نام محصول الزامی است" };
+      if (p.quotaGb <= 0 || p.durationDays <= 0 || p.price < 0) return { ok: false, error: "سهمیه، مدت و قیمت باید معتبر باشند" };
+      const idx = s.products.findIndex((x) => x.id === p.id);
+      const isNew = idx === -1;
+      if (isNew) {
+        s.products.push({ ...p, id: p.id || uid("p") });
+      } else {
+        s.products[idx] = { ...p };
+      }
+      audit(
+        s,
+        me.name,
+        isNew ? "افزودن محصول" : "ویرایش محصول",
+        `${p.name} — ${p.quotaGb}GB/${p.durationDays} روز — ${money(p.price)} — گروه ${p.groupId}${p.popular ? " — پیشنهادی" : ""}`,
+        "info"
+      );
+      commit(s);
+      return { ok: true };
+    },
+
+    async deleteProduct(id) {
+      await delay(300);
+      const s = clone();
+      const me = s.users.find((u) => u.id === s.currentUserId)!;
+      const p = s.products.find((x) => x.id === id);
+      if (!p) return { ok: false, error: "محصول یافت نشد" };
+      const hasActiveAccount = s.accounts.some((a) => a.groupId === p.groupId);
+      if (hasActiveAccount) return { ok: false, error: "اکانت فعالی به گروه این محصول متصل است — ابتدا غیرفعال کنید" };
+      s.products = s.products.filter((x) => x.id !== id);
+      audit(s, me.name, "حذف محصول", `${p.name} (${p.groupId})`, "danger");
+      commit(s);
+      return { ok: true };
+    },
+
+    /** افزودن یا ویرایش درگاه پرداخت */
+    async saveGateway(g) {
+      await delay(350);
+      const s = clone();
+      const me = s.users.find((u) => u.id === s.currentUserId)!;
+      if (!g.name.trim()) return { ok: false, error: "نام درگاه الزامی است" };
+      const idx = s.gateways.findIndex((x) => x.id === g.id);
+      const isNew = idx === -1;
+      if (isNew) s.gateways.push({ ...g, id: g.id || uid("gw") });
+      else s.gateways[idx] = { ...g };
+      audit(s, me.name, isNew ? "افزودن درگاه پرداخت" : "ویرایش درگاه پرداخت", `${g.name} (${g.provider}) — ${g.enabled ? "فعال" : "غیرفعال"}`, "security");
+      commit(s);
+      return { ok: true };
+    },
+
+    async deleteGateway(id) {
+      await delay(300);
+      const s = clone();
+      const me = s.users.find((u) => u.id === s.currentUserId)!;
+      const g = s.gateways.find((x) => x.id === id);
+      s.gateways = s.gateways.filter((x) => x.id !== id);
+      audit(s, me.name, "حذف درگاه پرداخت", g ? g.name : id, "danger");
+      commit(s);
+      return { ok: true };
+    },
+
+    /** افزودن یا ویرایش کارت کارت‌به‌کارت */
+    async saveCard(c) {
+      await delay(350);
+      const s = clone();
+      const me = s.users.find((u) => u.id === s.currentUserId)!;
+      const digits = c.number.replace(/\D/g, "");
+      if (digits.length !== 16) return { ok: false, error: "شماره کارت باید ۱۶ رقم باشد" };
+      const idx = s.cards.findIndex((x) => x.id === c.id);
+      const isNew = idx === -1;
+      if (isNew) s.cards.push({ ...c, id: c.id || uid("card") });
+      else s.cards[idx] = { ...c };
+      audit(s, me.name, isNew ? "افزودن کارت بانکی" : "ویرایش کارت بانکی", `به نام ${c.holder || "—"} — ${c.enabled ? "فعال" : "غیرفعال"}`, "security");
+      commit(s);
+      return { ok: true };
+    },
+
+    async deleteCard(id) {
+      await delay(300);
+      const s = clone();
+      const me = s.users.find((u) => u.id === s.currentUserId)!;
+      s.cards = s.cards.filter((x) => x.id !== id);
+      audit(s, me.name, "حذف کارت بانکی", id, "danger");
       commit(s);
       return { ok: true };
     },

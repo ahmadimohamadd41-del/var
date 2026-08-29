@@ -1,7 +1,7 @@
 import type { AppState } from "./types";
 import { GB } from "./format";
 
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 
 const D = 86_400_000;
 const H = 3_600_000;
@@ -165,13 +165,18 @@ export function seed(): AppState {
     ],
     settings: {
       minPartnerBalance: 1_000_000,
-      cardNumber: "6274 1290 3355 8412",
-      cardHolder: "محمد رضوانی",
-      gatewayEnabled: true,
       supportHandle: "@VARVPN_Support",
       apiBase: "http://127.0.0.1:8000",
       simulateMissingGroup: false,
     },
+    gateways: [
+      { id: "gw_zarin", name: "زرین‌پال", provider: "zarinpal", merchantId: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", enabled: true },
+      { id: "gw_idpay", name: "آیدی‌پی", provider: "idpay", merchantId: "", enabled: false },
+    ],
+    cards: [
+      { id: "card_1", number: "6274 1290 3355 8412", holder: "محمد رضوانی", enabled: true },
+      { id: "card_2", number: "6037 9975 1120 4458", holder: "محمد رضوانی", enabled: false },
+    ],
     availableGroups: ["G10", "G20", "G50", "G100"],
   };
 }

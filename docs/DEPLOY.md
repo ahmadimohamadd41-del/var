@@ -27,7 +27,7 @@
 | # | مورد | از کجا | هزینه | کجا ذخیره شود |
 |---|---|---|---|---|
 | ۱ | توکن بات تلگرام | `@BotFather` → `/newbot` | رایگان | `.env` روی سرور |
-| ۲ | دامنه | nic.ir برای `.ir` یا Namecheap/Cloudflare | سالانه | رکورد DNS: `A → 54.37.106.132` |
+| ۲ | دامنه | nic.ir برای `.ir` یا Namecheap — **یا رایگان: DuckDNS (بخش ۵٫۱)** | سالانه/رایگان | رکورد DNS: `A → 54.37.106.132` |
 | ۳ | گواهی HTTPS | Let's Encrypt با certbot (خودکار و رایگان) | رایگان | خود certbot مدیریت می‌کند |
 | ۴ | درگاه پرداخت | زرین‌پال/نکست‌پی (ثبت‌نام → کد مرچنت) — فعلاً لازم نیست | رایگان | `.env` روی سرور |
 | ۵ | کاربر دیتابیس VAR | خودتان روی سرور می‌سازید (بخش ۶) | — | `.env` روی سرور |
@@ -122,6 +122,30 @@ sudo certbot --nginx -d app.YOURDOMAIN.com    # certbot خودش 443 و redirect
 ```
 
 سپس در BotFather طبق بخش ۲، Menu Button را روی `https://app.YOURDOMAIN.com` تنظیم کنید. **تمام — مینی‌اپ داخل تلگرام باز می‌شود.**
+
+### ۵٫۱) دامنه و SSL ندارید؟ — راه‌حل کاملاً رایگان (DuckDNS + Let's Encrypt)
+
+تلگرام برای بازکردن مینی‌اپ حتماً **HTTPS** می‌خواهد، ولی لازم نیست دامنه بخرید:
+
+1. **زیردامنه رایگان:** در [duckdns.org](https://www.duckdns.org) با اکانت گوگل/گیت‌هاب لاگین کنید و یک زیردامنه مثل `myvpn.duckdns.org` بسازید. توکن API را کپی کنید.
+
+2. **آپدیت خودکار IP** (چون IP سرور ممکن است عوض شود) — روی سرور:
+   ```bash
+   echo 'YOUR_DUCKDNS_TOKEN' > ~/duck.token
+   crontab -e
+   # این خط را اضافه کنید:
+   */5 * * * * curl "https://www.duckdns.org/update?domains=myvpn&token=$(cat ~/duck.token)&ip=" >/dev/null 2>&1
+   ```
+
+3. **گواهی SSL رایگان** برای همان زیردامنه:
+   ```bash
+   sudo certbot certonly --standalone -d myvpn.duckdns.org
+   ```
+   سپس در vhost بخش ۵، `server_name myvpn.duckdns.org;` بگذارید و certbot را با `--nginx` اجرا کنید تا 443 را خودش اضافه کند.
+
+4. در BotFather، Menu Button را روی `https://myvpn.duckdns.org` تنظیم کنید.
+
+> **نکته:** DuckDNS فقط زیردامنه می‌دهد و برای شروع و تست کاملاً کافی است. هر وقت خواستید برند خودتان را داشته باشید، دامنه بخرید و فقط `server_name` و Menu Button را عوض کنید — بقیه پیکربندی دست نمی‌خورد.
 
 ---
 

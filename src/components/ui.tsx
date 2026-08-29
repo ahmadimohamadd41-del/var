@@ -254,7 +254,7 @@ export function ConfirmBtn({
   busy = false,
 }: {
   onConfirm: () => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   confirmLabel?: string;
   className?: string;
   busy?: boolean;
@@ -279,7 +279,7 @@ export function ConfirmBtn({
         }
       }}
     >
-      {busy ? "…" : arm ? confirmLabel : children}
+      {busy ? "…" : arm ? confirmLabel : (children ?? <><IcX className="w-3.5 h-3.5" /> حذف</>)}
     </button>
   );
 }

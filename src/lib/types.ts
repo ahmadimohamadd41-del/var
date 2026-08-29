@@ -117,11 +117,25 @@ export interface AuditEntry {
   kind: AuditKind;
 }
 
+/** درگاه پرداخت آنلاین — ادمین می‌تواند چند درگاه تعریف و فعال/غیرفعال کند */
+export interface PaymentGateway {
+  id: string;
+  name: string; // نام نمایشی برای مشتری، مثلاً «زرین‌پال»
+  provider: string; // zarinpal | idpay | nextpay | sepehr | custom
+  merchantId: string; // کد مرچنت — فقط سمت بک‌اند/سرور استفاده می‌شود
+  enabled: boolean;
+}
+
+/** کارت بانکی برای کارت‌به‌کارت — ادمین freely اضافه/ویرایش/حذف می‌کند */
+export interface CardConfig {
+  id: string;
+  number: string;
+  holder: string;
+  enabled: boolean;
+}
+
 export interface Settings {
   minPartnerBalance: number;
-  cardNumber: string;
-  cardHolder: string;
-  gatewayEnabled: boolean;
   supportHandle: string;
   apiBase: string;
   /** demo switch: simulates missing RADIUS group G50 → safe provisioning failure */
@@ -141,6 +155,8 @@ export interface AppState {
   partnerRequests: PartnerRequest[];
   audit: AuditEntry[];
   settings: Settings;
+  gateways: PaymentGateway[]; // درگاه‌های پرداخت آنلاین (مدیریت ادمین)
+  cards: CardConfig[]; // کارت‌های کارت‌به‌کارت (مدیریت ادمین)
   availableGroups: string[]; // groups that exist in FreeRADIUS radgroupcheck
 }
 

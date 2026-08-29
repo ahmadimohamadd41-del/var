@@ -60,7 +60,7 @@ export default function PurchaseFlow({
   const { state, me, api, toast } = useStore();
   const [phase, setPhase] = useState<Phase>("method");
   const [qty, setQty] = useState(initialQty);
-  const [method, setMethod] = useState<PayMethod>(me.role === "partner" ? "wallet" : state.settings.gatewayEnabled ? "gateway" : "card");
+  const [method, setMethod] = useState<PayMethod>(me.role === "partner" ? "wallet" : state.gateways.some((g) => g.enabled) ? "gateway" : "card");
   const [receipt, setReceipt] = useState<string>("");
   const [stepIdx, setStepIdx] = useState(0);
   const [failedStep, setFailedStep] = useState<number | null>(null);
@@ -73,6 +73,14 @@ export default function PurchaseFlow({
   const wallet = state.wallets.find((w) => w.userId === me.id);
   const server = state.servers[0];
 
+  // درگاه‌ها و کارت‌های فعال — مدیریت‌شده توسط ادمین
+  const enabledGateways = state.gateways.filter((g) => g.enabled);
+  const enabledCards = state.cards.filter((c) => c.enabled);
+  const [gatewayId, setGatewayId] = useState("");
+  const [cardId, setCardId] = useState("");
+  const selGateway = enabledGateways.find((g) => g.id === gatewayId) ?? enabledGateways[0];
+  const selCard = enabledCards.find((c) => c.id === cardId) ?? enabledCards[0];
+
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const methods: { id: PayMethod; label: string; sub: string; icon: React.ReactNode; disabled?: boolean; disabledReason?: string }[] = [
@@ -81,14 +89,16 @@ export default function PurchaseFlow({
       label: "درگاه بانکی",
       sub: "پرداخت آنلاین و فعال‌سازی آنی",
       icon: <IcBolt className="w-5 h-5" />,
-      disabled: !state.settings.gatewayEnabled,
-      disabledReason: "موقتاً غیرفعال",
+      disabled: enabledGateways.length === 0,
+      disabledReason: enabledGateways.length === 0 ? "درگاه فعالی تعریف نشده" : undefined,
     },
     {
       id: "card",
       label: "کارت به کارت",
       sub: "ارسال فیش — تأیید توسط مدیر",
       icon: <IcCard className="w-5 h-5" />,
+      disabled: enabledCards.length === 0,
+      disabledReason: enabledCards.length === 0 ? "کارت فعالی تعریف نشده" : undefined,
     },
     {
       id: "wallet",
@@ -195,6 +205,61 @@ export default function PurchaseFlow({
               })}
             </div>
 
+            {/* انتخاب درگاه — اگر ادمین چند درگاه فعال کرده باشد */}
+            {method === "gateway" && enabledGateways.length > 1 && (
+              <div className="anim-fade-up mt-4">
+                <p className="text-xs font-bold text-mist-400 mb-2">انتخاب درگاه</p>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {enabledGateways.map((g) => {
+                    const active = selGateway?.id === g.id;
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => {
+                          setGatewayId(g.id);
+                          haptic("tap");
+                        }}
+                        className={`shrink-0 px-3.5 py-2.5 rounded-lg border text-sm font-bold transition-all cursor-pointer ${
+                          active ? "border-mint-400/60 bg-mint-500/12 text-mint-300" : "border-mint-400/10 bg-deep-800/70 text-mist-400 hover:border-mint-400/30"
+                        }`}
+                      >
+                        {g.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* انتخاب کارت مقصد — اگر ادمین چند کارت فعال کرده باشد */}
+            {method === "card" && enabledCards.length > 1 && (
+              <div className="anim-fade-up mt-4">
+                <p className="text-xs font-bold text-mist-400 mb-2">واریز به کارت</p>
+                <div className="space-y-2">
+                  {enabledCards.map((c) => {
+                    const active = selCard?.id === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setCardId(c.id);
+                          haptic("tap");
+                        }}
+                        className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg border text-right transition-all cursor-pointer ${
+                          active ? "border-gold-400/60 bg-gold-500/10" : "border-mint-400/10 bg-deep-800/70 hover:border-mint-400/30"
+                        }`}
+                      >
+                        <span className={`text-[0.72rem] ${active ? "text-gold-300" : "text-mist-400"}`}>{c.holder || "—"}</span>
+                        <code dir="ltr" className={`text-[0.72rem] tabular ${active ? "text-mist-100" : "text-mist-500"}`}>{c.number}</code>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 flex items-center justify-between card px-4 py-3.5">
               <span className="text-sm text-mist-300">مبلغ قابل پرداخت</span>
               <span className="font-display text-xl text-gold-300 tabular">{money(total)}</span>
@@ -228,13 +293,13 @@ export default function PurchaseFlow({
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-mist-500">شماره کارت</span>
                   <span className="flex items-center gap-2" dir="ltr">
-                    <code className="text-sm font-bold text-mist-100 tracking-wider tabular">{state.settings.cardNumber}</code>
-                    <CopyBtn text={state.settings.cardNumber.replace(/\s/g, "")} />
+                    <code className="text-sm font-bold text-mist-100 tracking-wider tabular">{selCard?.number ?? "—"}</code>
+                    {selCard && <CopyBtn text={selCard.number.replace(/\s/g, "")} />}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-mist-500">به نام</span>
-                  <span className="text-sm font-bold text-mist-200">{state.settings.cardHolder}</span>
+                  <span className="text-sm font-bold text-mist-200">{selCard?.holder ?? "—"}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-mist-500">مبلغ دقیق</span>
