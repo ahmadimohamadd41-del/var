@@ -12,9 +12,13 @@ import type {
   PurchaseResult,
   Settings,
   User,
+  VpnServer,
 } from "./types";
 import { seed, SEED_VERSION } from "./seed";
-import { GB, genPassword, money, uid } from "./format";
+import { GB, genPassword, money, serverLabel, uid } from "./format";
+
+/** شماره عمومی سرور از id — برای متن‌های فارسی */
+const codeOf = (s: AppState, serverId: string) => s.servers.find((x) => x.id === serverId)?.code ?? 1;
 
 const KEY = "varvpn:state";
 const DAY = 86_400_000;
@@ -90,7 +94,11 @@ interface Api {
   /** افزودن یا ویرایش کارت کارت‌به‌کارت */
   saveCard: (c: CardConfig) => Promise<{ ok: boolean; error?: string }>;
   deleteCard: (id: string) => Promise<{ ok: boolean; error?: string }>;
-  requestPartner: (note: string) => Promise<{ ok: boolean; error?: string }>;
+  requestPartner: (phone: string, note: string, termsAccepted: boolean) => Promise<{ ok: boolean; error?: string }>;
+  /** افزودن سرور جدید — شماره بعدی به‌صورت خودکار اختصاص می‌یابد */
+  addServer: (region: string, host: string) => Promise<{ ok: boolean; error?: string }>;
+  /** ویرایش سرور (region/host داخلی یا وضعیت آنلاین/نگهداری) */
+  updateServer: (id: string, patch: Partial<Pick<VpnServer, "region" | "host" | "status">>) => Promise<{ ok: boolean; error?: string }>;
   healthCheck: () => Promise<{ radiusMs: number; dbMs: number; workerMs: number; serverMs: number; at: number }>;
 }
 
@@ -138,7 +146,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const dismissToast = (id: number) => setToasts((t) => t.filter((x) => x.id !== id));
 
   /** ساخت اکانت RADIUS — فقط اگر گروه از قبل موجود باشد */
-  function newAccount(s: AppState, ownerId: string, product: Product, opts: { soldBy?: string; customerName?: string } = {}): Account {
+  function newAccount(s: AppState, ownerId: string, product: Product, opts: { soldBy?: string; customerName?: string; serverId: string }): Account {
     const owner = s.users.find((u) => u.id === ownerId)!;
     const num = Math.floor(1000 + Math.random() * 9000);
     return {
@@ -148,7 +156,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       customerName: opts.customerName,
       radiusUsername: `var_${owner.tgId.slice(-4)}${num}`,
       radiusPassword: genPassword(10),
-      serverId: "germany-1",
+      serverId: opts.serverId,
       groupId: product.groupId,
       quotaBytes: product.quotaGb * GB,
       usedBytes: 0,
@@ -228,14 +236,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             "info"
           );
         } else {
-          const acc = newAccount(s2, order2.userId, prod2);
+          const acc = newAccount(s2, order2.userId, prod2, { serverId: order2.serverId });
           s2.accounts.unshift(acc);
           created.push(acc);
-          audit(s2, "سیستم", "ساخت اکانت RADIUS", `${acc.radiusUsername} در گروه ${prod2.groupId} روی آلمان ۱`, "security");
+          audit(s2, "سیستم", "ساخت اکانت RADIUS", `${acc.radiusUsername} در گروه ${prod2.groupId} روی ${serverLabel(codeOf(s2, order2.serverId))}`, "security");
         }
       } else {
         // فروش همکار: اکانت به‌محض وجود مشتری ساخته می‌شود (قانون ۱۳)
-        const acc = newAccount(s2, order2.userId, prod2, { soldBy: order2.userId, customerName: order2.forCustomer });
+        const acc = newAccount(s2, order2.userId, prod2, { soldBy: order2.userId, customerName: order2.forCustomer, serverId: order2.serverId });
         s2.accounts.unshift(acc);
         created.push(acc);
         audit(s2, "سیستم", "ساخت اکانت (فروش همکار)", `مشتری: ${order2.forCustomer} — ${prod2.name} → ${acc.radiusUsername}`, "info");
@@ -244,7 +252,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     order2.status = "active";
     order2.accountIds = created.map((a) => a.id);
-    audit(s2, "سیستم", "provisioning کامل شد", `سفارش #${orderId.slice(-6)} — ${created.length} اکانت روی آلمان ۱ فعال شد`, "info");
+    audit(s2, "سیستم", "provisioning کامل شد", `سفارش #${orderId.slice(-6)} — ${created.length} اکانت روی ${serverLabel(codeOf(s2, order2.serverId))} فعال شد`, "info");
     commit(s2);
     return { ok: true, orderId, status: "active", accounts: created };
   }
@@ -260,6 +268,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const qty = Math.max(1, Math.min(10, input.qty ?? 1));
       const total = product.price * qty;
       const method = input.method;
+
+      // انتخاب سرور: سرور انتخابی باید آنلاین باشد؛ وگرنه سرور ۱ فعال
+      const onlineServers = s.servers.filter((x) => x.status === "online");
+      if (onlineServers.length === 0) return { ok: false, orderId: "", status: "failed", error: "هیچ سرور آنلاینی در دسترس نیست" };
+      const chosen = s.servers.find((x) => x.id === input.serverId && x.status === "online");
+      const serverId = chosen ? chosen.id : onlineServers[0].id;
 
       if (method === "gateway" && !s.gateways.some((g) => g.enabled))
         return { ok: false, orderId: "", status: "failed", error: "هیچ درگاه پرداخت فعالی وجود ندارد" };
@@ -281,7 +295,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         id: orderId,
         userId: me.id,
         productId: product.id,
-        serverId: "germany-1",
+        serverId,
         qty,
         total,
         payMethod: method,
@@ -528,15 +542,64 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { ok: true };
     },
 
-    async requestPartner(note) {
+    async requestPartner(phone, note, termsAccepted) {
       await delay(400);
       const s = clone();
       const me = s.users.find((u) => u.id === s.currentUserId)!;
       if (me.role !== "customer") return { ok: false, error: "فقط کاربران عادی می‌توانند درخواست همکاری بدهند" };
       if (s.partnerRequests.some((r) => r.userId === me.id && r.status === "pending"))
         return { ok: false, error: "درخواست قبلی شما هنوز در حال بررسی است" };
-      s.partnerRequests.unshift({ id: uid("pr"), userId: me.id, note: note.trim() || "—", status: "pending", at: Date.now() });
-      audit(s, me.name, "درخواست همکاری", "درخواست فروشندگی ثبت شد — در انتظار تأیید مدیر", "info");
+      if (!termsAccepted) return { ok: false, error: "پذیرش شرایط و مزایا الزامی است" };
+      s.partnerRequests.unshift({
+        id: uid("pr"),
+        userId: me.id,
+        phone: phone.trim(),
+        note: note.trim() || "—",
+        termsAccepted: true,
+        status: "pending",
+        at: Date.now(),
+      });
+      audit(s, me.name, "درخواست همکاری", "موبایل ثبت و شرایط پذیرفته شد — در انتظار فعال‌سازی پنل توسط مدیر", "info");
+      commit(s);
+      return { ok: true };
+    },
+
+    /** افزودن سرور جدید — شماره بعدی به‌صورت خودکار */
+    async addServer(region, host) {
+      await delay(400);
+      const s = clone();
+      const me = s.users.find((u) => u.id === s.currentUserId)!;
+      if (!region.trim()) return { ok: false, error: "مشخصات سرور (کشور/شهر) را وارد کنید" };
+      const nextCode = Math.max(0, ...s.servers.map((x) => x.code)) + 1;
+      s.servers.push({
+        id: `srv-${nextCode}`,
+        code: nextCode,
+        region: region.trim(),
+        host: host.trim() || `srv${nextCode}.var-vpn.example`,
+        status: "online",
+        latencyMs: 35 + Math.round(Math.random() * 30),
+      });
+      audit(s, me.name, "افزودن سرور", `${serverLabel(nextCode)} (${region.trim()}) به ناوگان اضافه شد`, "security");
+      commit(s);
+      return { ok: true };
+    },
+
+    async updateServer(id, patch) {
+      await delay(300);
+      const s = clone();
+      const me = s.users.find((u) => u.id === s.currentUserId)!;
+      const srv = s.servers.find((x) => x.id === id);
+      if (!srv) return { ok: false, error: "سرور پیدا نشد" };
+      if (patch.region !== undefined) srv.region = patch.region.trim() || srv.region;
+      if (patch.host !== undefined) srv.host = patch.host.trim() || srv.host;
+      if (patch.status !== undefined) srv.status = patch.status;
+      audit(
+        s,
+        me.name,
+        "ویرایش سرور",
+        `${serverLabel(srv.code)} — ${patch.status ? `وضعیت: ${patch.status === "online" ? "آنلاین" : "نگهداری"}` : "مشخصات داخلی"}`,
+        patch.status === "maintenance" ? "danger" : "info"
+      );
       commit(s);
       return { ok: true };
     },

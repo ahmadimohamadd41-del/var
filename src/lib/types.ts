@@ -21,11 +21,15 @@ export interface Product {
   popular?: boolean;
 }
 
+/**
+ * سرور VPN — مشتری فقط «سرور N» می‌بیند؛ region/host داخلی است و هرگز
+ * در فرانت مشتری نمایش داده نمی‌شود (فقط پنل ادمین).
+ */
 export interface VpnServer {
   id: string;
-  name: string;
-  region: string;
-  host: string;
+  code: number; // شماره عمومی: سرور ۱، سرور ۲ …
+  region: string; // INTERNAL ONLY — کشور/شهر واقعی، فقط برای ادمین
+  host: string; // INTERNAL ONLY — آدرس OpenVPN
   status: "online" | "maintenance";
   latencyMs: number;
 }
@@ -100,7 +104,9 @@ export interface Wallet {
 export interface PartnerRequest {
   id: string;
   userId: string;
+  phone: string; // شماره موبایل — اجباری در ثبت درخواست
   note: string;
+  termsAccepted: boolean; // شرایط و مزایا را خوانده و پذیرفته
   status: "pending" | "approved" | "rejected";
   at: number;
   decidedAt?: number;
@@ -166,6 +172,7 @@ export interface PurchaseInput {
   qty?: number;
   forCustomer?: string;
   receiptName?: string;
+  serverId?: string; // اگر چند سرور فعال باشد، انتخاب مشتری
 }
 
 export interface PurchaseResult {

@@ -1,7 +1,7 @@
 import type { AppState } from "./types";
 import { GB } from "./format";
 
-export const SEED_VERSION = 5;
+export const SEED_VERSION = 6;
 
 const D = 86_400_000;
 const H = 3_600_000;
@@ -26,7 +26,8 @@ export function seed(): AppState {
       { id: "p100", name: "۱۰۰ گیگابایت", quotaGb: 100, durationDays: 30, price: 548_000, groupId: "G100", active: true },
     ],
     servers: [
-      { id: "germany-1", name: "آلمان ۱", region: "Frankfurt", host: "de1.var-vpn.example", status: "online", latencyMs: 42 },
+      // region/host داخلی است — مشتری فقط «سرور ۱» می‌بیند
+      { id: "germany-1", code: 1, region: "Frankfurt, Germany", host: "de1.var-vpn.example", status: "online", latencyMs: 42 },
     ],
     accounts: [
       {
@@ -153,8 +154,25 @@ export function seed(): AppState {
       },
     ],
     partnerRequests: [
-      { id: "pr_seed", userId: "u_new", note: "مدیر کانال فروش اکانت در تبریز هستم، ماهانه حدود ۳۰ مشتری دارم.", status: "pending", at: now - 3 * H },
-      { id: "pr_old", userId: "u_partner", note: "نماینده فروش در مشهد", status: "approved", at: now - 26 * D, decidedAt: now - 25 * D },
+      {
+        id: "pr_seed",
+        userId: "u_new",
+        phone: "09141234567",
+        note: "مدیر کانال فروش اکانت در تبریز هستم، ماهانه حدود ۳۰ مشتری دارم.",
+        termsAccepted: true,
+        status: "pending",
+        at: now - 3 * H,
+      },
+      {
+        id: "pr_old",
+        userId: "u_partner",
+        phone: "09152203344",
+        note: "نماینده فروش در مشهد",
+        termsAccepted: true,
+        status: "approved",
+        at: now - 26 * D,
+        decidedAt: now - 25 * D,
+      },
     ],
     audit: [
       { id: "aud_5", at: now - 2 * H, actor: "پارسا کیان", action: "ثبت فیش کارت‌به‌کارت", detail: "۱۶۸٬۰۰۰ تومان برای سفارش ۲۰ گیگابایت — در انتظار بررسی", kind: "money" },

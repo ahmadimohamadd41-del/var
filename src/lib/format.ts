@@ -60,6 +60,15 @@ export function ltrDigits(s: string): string {
   return s.replace(/[۰-۹]/g, (c) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(c)));
 }
 
+/** برچسب عمومی سرور برای مشتری — بدون نام کشور */
+export const serverLabel = (code: number) => `سرور ${fa(code)}`;
+
+/** اعتبارسنجی شماره موبایل ایران — ارقام فارسی هم قبول می‌شود */
+export function normalizePhone(s: string): string {
+  return ltrDigits(s).replace(/[\s\-()]/g, "");
+}
+export const isValidPhone = (s: string) => /^09\d{9}$/.test(normalizePhone(s));
+
 export function genPassword(len = 10): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789#@$";
   let out = "";

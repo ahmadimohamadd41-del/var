@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { useStore } from "../lib/store";
-import { agoFa, fa, faGb, money, pct, remainFa, timeFa } from "../lib/format";
+import { useStore, haptic } from "../lib/store";
+import { agoFa, fa, faGb, isValidPhone, money, normalizePhone, pct, remainFa, timeFa } from "../lib/format";
 import type { Product } from "../lib/types";
-import { Chip, IcAlert, IcCheck, IcClock, IcPlus, IcSend, IcUsers, IcWallet, Reveal, SectionHead, Stepper, Empty } from "../components/ui";
+import { Chip, IcAlert, IcCheck, IcClock, IcPlus, IcSend, IcSpark, IcUsers, IcWallet, Reveal, SectionHead, Stepper, Empty } from "../components/ui";
 import PurchaseFlow from "../components/PurchaseFlow";
 
 export default function Partner() {
@@ -48,12 +48,18 @@ function Avatar({ name }: { name: string }) {
   );
 }
 
-/* ---------- فرم درخواست همکاری ---------- */
+/* ---------- فرم درخواست همکاری (موبایل + شرایط و مزایا) ---------- */
 function BecomePartner() {
   const { state, me, api, toast } = useStore();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
+  const [terms, setTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const req = state.partnerRequests.find((r) => r.userId === me.id);
+
+  const phoneOk = isValidPhone(phone);
+  const minBalance = money(state.settings.minPartnerBalance);
 
   return (
     <div>
@@ -63,13 +69,13 @@ function BecomePartner() {
           <span className="w-12 h-12 rounded-xl bg-gold-500/15 text-gold-300 flex items-center justify-center mb-3">
             <IcUsers className="w-6 h-6" />
           </span>
-          <h3 className="font-display text-2xl text-mist-100">همکار فروش VAR شوید</h3>
+          <h3 className="font-display text-2xl text-mist-100">همکار فروش ور وی‌پی‌ان شوید</h3>
           <p className="text-xs text-mist-400 leading-6 mt-2">
             بدون نگهداری موجودی اکانت — هر اکانت به‌محض داشتن مشتری ساخته می‌شود. کیف پول ledger-based با حداقل موجودی{" "}
-            <b className="text-gold-300 tabular">{money(state.settings.minPartnerBalance)}</b>.
+            <b className="text-gold-300 tabular">{minBalance}</b>.
           </p>
           <ul className="mt-4 space-y-2">
-            {["خرید عمومی با کسر آنی از کیف پول", "ساخت اکانت فوری برای مشتری (تکی یا عمده)", "ریز گردش کیف پول با دلیل و ممیزی کامل"].map((t) => (
+            {["خرید عمومی با کسر آنی از کیف پول", "ساخت اکانت فوری برای مشتری (تکی یا عمده)", "گزارش مصرف هر مشتری + ریز گردش کیف پول"].map((t) => (
               <li key={t} className="flex items-center gap-2 text-[0.75rem] text-mist-300">
                 <IcCheck className="w-4 h-4 text-mint-400 shrink-0" />
                 {t}
@@ -89,41 +95,151 @@ function BecomePartner() {
             {req.status === "pending" ? <IcClock className="w-6 h-6 text-gold-300" /> : req.status === "approved" ? <IcCheck className="w-6 h-6 text-mint-300" /> : <IcAlert className="w-6 h-6 text-coral-300" />}
             <div>
               <p className="text-sm font-bold text-mist-100">
-                {req.status === "pending" ? "درخواست شما در حال بررسی است" : req.status === "approved" ? "درخواست شما تأیید شد" : "درخواست شما رد شد"}
+                {req.status === "pending" ? "درخواست شما در حال بررسی است" : req.status === "approved" ? "پنل همکار برای شما فعال شد" : "درخواست شما رد شد"}
               </p>
-              <p className="text-[0.7rem] text-mist-500 mt-0.5">{agoFa(req.at)} — نتیجه توسط مدیر اعلام می‌شود</p>
+              <p className="text-[0.7rem] text-mist-500 mt-0.5">
+                {agoFa(req.at)} — موبایل <span dir="ltr">{req.phone}</span>
+              </p>
             </div>
           </div>
         </Reveal>
       ) : (
         <Reveal delay={100}>
           <div className="card mt-4 px-4 py-4">
-            <label className="text-xs font-bold text-mist-400 block mb-2">توضیح درخواست (اختیاری)</label>
-            <textarea
-              className="input min-h-24 resize-none"
-              placeholder="مثلاً: مدیر کانال فروش هستم و ماهانه حدود ۲۰ مشتری دارم…"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              maxLength={200}
-            />
-            <button
-              className="btn btn-gold w-full py-3 mt-3"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                const r = await api.requestPartner(note);
-                setBusy(false);
-                if (r.ok) toast("درخواست همکاری ثبت شد", "ok");
-                else toast(r.error ?? "خطا", "err");
-              }}
-            >
-              <IcSend className="w-4 h-4" />
-              {busy ? "در حال ثبت…" : "ثبت درخواست همکاری"}
-            </button>
+            {/* نوار گام‌ها */}
+            <div className="flex items-center gap-2 mb-4">
+              <StepDot n={1} active={step >= 1} label="موبایل و معرفی" />
+              <span className={`flex-1 h-0.5 rounded-full ${step === 2 ? "bg-gold-400" : "bg-deep-600"}`} />
+              <StepDot n={2} active={step === 2} label="شرایط و مزایا" />
+            </div>
+
+            {step === 1 ? (
+              <div className="anim-fade-up space-y-3.5">
+                <div>
+                  <label className="text-xs font-bold text-mist-400 block mb-1.5">
+                    شماره موبایل <span className="text-coral-300">*</span>
+                  </label>
+                  <input
+                    className="input num-input text-base tracking-widest"
+                    dir="ltr"
+                    inputMode="tel"
+                    placeholder="09123456789"
+                    value={phone}
+                    onChange={(e) => setPhone(normalizePhone(e.target.value))}
+                    maxLength={11}
+                  />
+                  <p className={`text-[0.65rem] mt-1.5 ${phoneOk ? "text-mint-400" : "text-mist-600"}`}>
+                    {phoneOk ? "✓ شماره معتبر است" : "شماره باید ۱۱ رقمی و با ۰۹ شروع شود"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-mist-400 block mb-1.5">توضیح درخواست (اختیاری)</label>
+                  <textarea
+                    className="input min-h-24 resize-none"
+                    placeholder="مثلاً: مدیر کانال فروش هستم و ماهانه حدود ۲۰ مشتری دارم…"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    maxLength={200}
+                  />
+                </div>
+                <button
+                  className="btn btn-gold w-full py-3"
+                  disabled={!phoneOk}
+                  onClick={() => {
+                    setStep(2);
+                    haptic("tap");
+                  }}
+                >
+                  مرحله بعد — مطالعه شرایط
+                </button>
+              </div>
+            ) : (
+              <div className="anim-fade-up">
+                <p className="text-sm font-bold text-gold-300 flex items-center gap-2 mb-3">
+                  <IcSpark className="w-4 h-4" />
+                  مزایای همکاری
+                </p>
+                <ul className="space-y-1.5 mb-4">
+                  {[
+                    "کمیسیون همکاری روی هر فروش",
+                    "ساخت فوری اکانت بدون سرمایه‌گذاری اولیه",
+                    "گزارش لحظه‌ای مصرف و انقضای مشتری‌ها",
+                    "پشتیبانی اختصاصی و اولویت‌دار",
+                  ].map((t) => (
+                    <li key={t} className="flex items-center gap-2 text-[0.72rem] text-mist-300">
+                      <IcCheck className="w-3.5 h-3.5 text-mint-400 shrink-0" />
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="text-sm font-bold text-coral-300 mb-3">شرایط همکاری</p>
+                <div className="rounded-lg border border-coral-500/25 bg-coral-900/20 px-3.5 py-3 space-y-1.5 mb-4">
+                  {[
+                    `حداقل موجودی کیف پول قبل از فروش: ${minBalance}`,
+                    "فروش فقط از طریق همین پنل و با تعرفه‌های رسمی",
+                    "تسویه فقط از کیف پول — پرداخت مستقیم پذیرفته نمی‌شود",
+                    "پشتیبانی سطح ۱ مشتری‌ها بر عهده همکار است",
+                  ].map((t) => (
+                    <li key={t} className="flex items-start gap-2 text-[0.72rem] text-mist-300 leading-5 list-none">
+                      <span className="w-1.5 h-1.5 rounded-full bg-coral-400 mt-1.5 shrink-0" />
+                      {t}
+                    </li>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTerms(!terms);
+                    haptic("tap");
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-3 rounded-lg border transition-all cursor-pointer ${
+                    terms ? "border-mint-500/50 bg-mint-500/10" : "border-mint-400/15 bg-deep-900/60"
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${terms ? "bg-mint-500 border-mint-500 text-deep-950" : "border-deep-500"}`}>
+                    {terms && <IcCheck className="w-3 h-3" />}
+                  </span>
+                  <span className={`text-[0.72rem] text-right ${terms ? "text-mint-300" : "text-mist-300"}`}>شرایط و مزایا را خواندم و می‌پذیرم</span>
+                </button>
+
+                <div className="flex gap-2 mt-4">
+                  <button className="btn btn-ghost flex-1 py-3" onClick={() => setStep(1)}>
+                    بازگشت
+                  </button>
+                  <button
+                    className="btn btn-gold flex-[2] py-3"
+                    disabled={!terms || busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      const r = await api.requestPartner(phone, note, terms);
+                      setBusy(false);
+                      if (r.ok) toast("درخواست ثبت شد — منتظر فعال‌سازی پنل توسط مدیر", "ok");
+                      else toast(r.error ?? "خطا", "err");
+                    }}
+                  >
+                    <IcSend className="w-4 h-4" />
+                    {busy ? "در حال ثبت…" : "ثبت درخواست"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </Reveal>
       )}
     </div>
+  );
+}
+
+function StepDot({ n, active, label }: { n: number; active: boolean; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`w-6 h-6 rounded-full text-[0.7rem] font-bold flex items-center justify-center ${active ? "bg-gold-400 text-deep-900" : "bg-deep-700 text-mist-500"}`}>
+        {fa(n)}
+      </span>
+      <span className={`text-[0.65rem] font-bold ${active ? "text-gold-300" : "text-mist-600"}`}>{label}</span>
+    </span>
   );
 }
 

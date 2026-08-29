@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Account, PayMethod, Product, PurchaseResult } from "../lib/types";
 import { haptic, useStore } from "../lib/store";
-import { fa, faGb, gbOf, maskCard, money, remainFa } from "../lib/format";
-import { Chip, IcAlert, IcBolt, IcCard, IcCheck, IcClock, IcCopy, IcDownload, IcEye, IcEyeOff, IcReceipt, IcWallet, IcX, Modal, CopyBtn } from "./ui";
+import { fa, faGb, gbOf, maskCard, money, remainFa, serverLabel } from "../lib/format";
+import { Chip, IcAlert, IcBolt, IcCard, IcCheck, IcClock, IcCopy, IcDownload, IcEye, IcEyeOff, IcReceipt, IcServer, IcWallet, IcX, Modal, CopyBtn } from "./ui";
 
 type Phase = "method" | "card" | "processing" | "result";
 
-const STEP_LABELS = ["ثبت و تأیید پرداخت", "بررسی گروه RADIUS", "ساخت / تمدید اکانت", "فعال‌سازی روی آلمان ۱"];
+const STEP_LABELS = ["ثبت و تأیید پرداخت", "بررسی گروه RADIUS", "ساخت / تمدید اکانت", "فعال‌سازی روی سرور"];
 
 function ovpnContent(acc: Account, host: string, serverName: string): string {
   return [
@@ -58,6 +58,8 @@ export default function PurchaseFlow({
   forCustomer?: string;
 }) {
   const { state, me, api, toast } = useStore();
+  const onlineServers = state.servers.filter((s) => s.status === "online");
+  const [serverId, setServerId] = useState<string>(onlineServers[0]?.id ?? "");
   const [phase, setPhase] = useState<Phase>("method");
   const [qty, setQty] = useState(initialQty);
   const [method, setMethod] = useState<PayMethod>(me.role === "partner" ? "wallet" : state.gateways.some((g) => g.enabled) ? "gateway" : "card");
@@ -71,7 +73,7 @@ export default function PurchaseFlow({
 
   const total = product.price * qty;
   const wallet = state.wallets.find((w) => w.userId === me.id);
-  const server = state.servers[0];
+  const server = state.servers.find((s) => s.id === serverId) ?? onlineServers[0] ?? state.servers[0];
 
   // درگاه‌ها و کارت‌های فعال — مدیریت‌شده توسط ادمین
   const enabledGateways = state.gateways.filter((g) => g.enabled);
@@ -121,7 +123,7 @@ export default function PurchaseFlow({
     timers.current.push(window.setTimeout(() => setStepIdx(2), m === "card" ? 1000 : 1700));
     timers.current.push(window.setTimeout(() => setStepIdx(3), m === "card" ? 1400 : 2500));
 
-    const res = await api.purchase({ productId: product.id, method: m, qty, forCustomer, receiptName });
+    const res = await api.purchase({ productId: product.id, method: m, qty, forCustomer, receiptName, serverId: server?.id });
 
     // صبر تا پایان انیمیشن گام‌ها
     await new Promise((r) => timers.current.push(window.setTimeout(r, m === "card" ? 1600 : 2900)));
@@ -253,6 +255,36 @@ export default function PurchaseFlow({
                       >
                         <span className={`text-[0.72rem] ${active ? "text-gold-300" : "text-mist-400"}`}>{c.holder || "—"}</span>
                         <code dir="ltr" className={`text-[0.72rem] tabular ${active ? "text-mist-100" : "text-mist-500"}`}>{c.number}</code>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* انتخاب سرور — فقط اگر ادمین بیش از یک سرور آنلاین داشته باشد */}
+            {onlineServers.length > 1 && (
+              <div className="anim-fade-up mt-4">
+                <p className="text-xs font-bold text-mist-400 mb-2 flex items-center gap-1.5">
+                  <IcServer className="w-4 h-4 text-sky-350" />
+                  سرور مقصد
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {onlineServers.map((s) => {
+                    const active = server?.id === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          setServerId(s.id);
+                          haptic("tap");
+                        }}
+                        className={`px-3.5 py-2.5 rounded-lg border text-sm font-bold transition-all cursor-pointer ${
+                          active ? "border-sky-350/60 bg-sky-350/12 text-sky-350" : "border-mint-400/10 bg-deep-800/70 text-mist-400 hover:border-mint-400/30"
+                        }`}
+                      >
+                        {serverLabel(s.code)}
                       </button>
                     );
                   })}
@@ -405,18 +437,18 @@ export default function PurchaseFlow({
                   <p className="font-display text-xl text-mint-300">
                     {result.accounts.length > 1 ? `${fa(result.accounts.length)} اکانت فعال شد` : "اکانت شما فعال شد"}
                   </p>
-                  <p className="text-[0.7rem] text-mist-500 mt-1">سرور {server.name} — گروه {product.groupId} — {fa(product.quotaGb * (result.accounts.length > 1 ? 1 : qty))} گیگابایت</p>
+                  <p className="text-[0.7rem] text-mist-500 mt-1">{serverLabel(server.code)} — گروه {product.groupId} — {fa(product.quotaGb * (result.accounts.length > 1 ? 1 : qty))} گیگابایت</p>
                 </div>
 
                 <div className="space-y-3">
                   {result.accounts.map((acc) => (
-                    <AccountCreds key={acc.id} acc={acc} host={server.host} serverName={server.name} showPass={showPass} setShowPass={setShowPass} />
+                    <AccountCreds key={acc.id} acc={acc} host={server.host} serverName={`ور وی‌پی‌ان — ${serverLabel(server.code)}`} showPass={showPass} setShowPass={setShowPass} />
                   ))}
                 </div>
 
                 <div className="flex gap-2 mt-4">
                   {result.accounts.length === 1 && (
-                    <button className="btn btn-gold flex-1 py-3" onClick={() => downloadOvpn(result.accounts![0], server.host, server.name)}>
+                    <button className="btn btn-gold flex-1 py-3" onClick={() => downloadOvpn(result.accounts![0], server.host, `ور وی‌پی‌ان — ${serverLabel(server.code)}`)}>
                       <IcDownload className="w-4 h-4" />
                       دانلود تنظیمات OVPN
                     </button>

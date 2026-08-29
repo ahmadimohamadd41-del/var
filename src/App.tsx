@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { StoreProvider, initTelegram, useStore, haptic } from "./lib/store";
-import { fa } from "./lib/format";
+import { fa, serverLabel } from "./lib/format";
 import { IcAlert, IcCheck, IcHome, IcShield, IcSpark, IcStore, IcUser, IcUsers, LogoMark } from "./components/ui";
 import Dashboard from "./tabs/Dashboard";
 import Shop from "./tabs/Shop";
@@ -51,7 +51,8 @@ function Shell() {
           <LogoMark className="w-9 h-9" />
           <div className="flex-1 leading-none">
             <p className="font-display text-xl text-mist-100">
-              VAR <span className="text-gold-400">VPN</span>
+              ور <span className="text-gold-400">وی‌پی‌ان</span>
+              <span className="text-[0.68rem] text-mist-500 align-middle ms-2 tracking-widest" dir="ltr">VAR VPN</span>
             </p>
             <p className="text-[0.62rem] text-mist-500 mt-1">مینی‌اپ تلگرام • فروش و تمدید اکانت</p>
           </div>
@@ -130,19 +131,20 @@ function Shell() {
 
 function ServerPill() {
   const { state } = useStore();
-  const server = state.servers[0];
-  const [ping, setPing] = useState(server.latencyMs);
+  const server = state.servers.find((s) => s.status === "online") ?? state.servers[0];
+  const [ping, setPing] = useState(server?.latencyMs ?? 40);
 
   useEffect(() => {
     const t = setInterval(() => setPing(36 + Math.round(Math.random() * 24)), 2800);
     return () => clearInterval(t);
   }, []);
 
+  if (!server) return null;
   return (
     <div className="flex items-center gap-2 rounded-full border border-mint-400/20 bg-deep-800/80 px-3 py-1.5">
-      <span className="w-2 h-2 rounded-full bg-mint-400 pulse-dot" />
+      <span className={`w-2 h-2 rounded-full ${server.status === "online" ? "bg-mint-400 pulse-dot" : "bg-gold-400"}`} />
       <div className="leading-none text-left">
-        <p className="text-[0.65rem] font-bold text-mist-200">{server.name}</p>
+        <p className="text-[0.65rem] font-bold text-mist-200">{serverLabel(server.code)}</p>
         <p className="text-[0.58rem] text-mint-400 mt-0.5 tabular" dir="ltr">{ping}ms</p>
       </div>
     </div>

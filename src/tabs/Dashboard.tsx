@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useStore } from "../lib/store";
-import { fa, fa1, faGb, gbOf, last7DayLabels, money, pct, remainFa, timeFa } from "../lib/format";
+import { fa, fa1, faGb, gbOf, last7DayLabels, money, pct, remainFa, serverLabel, timeFa } from "../lib/format";
 import { Chip, IcAlert, IcBolt, IcCheck, IcClock, IcDownload, IcHistory, IcPower, IcRefresh, IcServer, IcSignal, Reveal, Ring, SectionHead, CopyBtn, Empty } from "../components/ui";
 import type { Account } from "../lib/types";
 
@@ -27,7 +27,7 @@ function ovpnContent(acc: Account, host: string, serverName: string): string {
 export default function Dashboard({ onGoShop }: { onGoShop: () => void }) {
   const { state, me, toast } = useStore();
   const account = state.accounts.find((a) => a.ownerId === me.id && !a.soldBy);
-  const server = state.servers[0];
+  const server = state.servers.find((s) => s.id === account?.serverId) ?? state.servers[0];
 
   const [ping, setPing] = useState(42);
   const [uptime, setUptime] = useState(0);
@@ -182,7 +182,7 @@ export default function Dashboard({ onGoShop }: { onGoShop: () => void }) {
 
           {/* کارت اتصال زنده */}
           <Reveal delay={140}>
-            <SectionHead title="اتصال زنده" sub="سرور آلمان ۱" icon={<IcSignal className="w-5 h-5" />} />
+            <SectionHead title="اتصال زنده" sub={serverLabel(server.code)} icon={<IcSignal className="w-5 h-5" />} />
             <div className="card px-5 py-4">
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
@@ -212,7 +212,7 @@ export default function Dashboard({ onGoShop }: { onGoShop: () => void }) {
                 <button
                   className="btn btn-ghost flex-1 py-2.5 text-sm"
                   onClick={() => {
-                    const blob = new Blob([ovpnContent(account, server.host, server.name)], { type: "text/plain;charset=utf-8" });
+                    const blob = new Blob([ovpnContent(account, server.host, `ور وی‌پی‌ان — ${serverLabel(server.code)}`)], { type: "text/plain;charset=utf-8" });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
