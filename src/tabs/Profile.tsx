@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useStore } from "../lib/store";
 import { dateFullFa, fa, money } from "../lib/format";
 import { Chip, ConfirmBtn, IcAlert, IcRefresh, IcServer, IcShield, IcTg, IcUser, IcUsers, Reveal, SectionHead } from "../components/ui";
+import TestLab from "../components/TestLab";
 
 export default function Profile() {
   const { state, me, switchUser, resetDemo } = useStore();
@@ -72,6 +73,10 @@ export default function Profile() {
             })}
           </div>
         </div>
+      </Reveal>
+
+      <Reveal delay={110}>
+        <TestLab />
       </Reveal>
 
       <Reveal delay={140}>
