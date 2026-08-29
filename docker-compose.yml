@@ -1,0 +1,48 @@
+# ============================================================
+# VAR VPN — compose project: varvpn
+#
+# فقط سرویس‌های خود VAR را مدیریت می‌کند.
+# ⛔ هرگز docker compose down روی پروژه‌های موجود (daloRADIUS) نزنید.
+# ⛔ FreeRADIUS و MariaDB-radius روی هاست می‌مانند — کانتینر نمی‌شوند.
+#
+# فعلاً:  web (مینی‌اپ)
+# بعداً:  api (FastAPI) + worker — در همین فایل اضافه می‌شوند
+# ============================================================
+
+name: varvpn
+
+services:
+  web:
+    build: .
+    container_name: varvpn-web
+    restart: unless-stopped
+    # فقط روی لوکال‌هاست — TLS را reverse-proxy هاست انجام می‌دهد
+    ports:
+      - "127.0.0.1:8090:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ------------------------------------------------------------
+  # فاز ۲ — بعد از ساخت بک‌اند FastAPI (Modular Monolith):
+  #
+  # api:
+  #   build: ./backend
+  #   container_name: varvpn-api
+  #   restart: unless-stopped
+  #   env_file: .env            # .env هرگز گیت نمی‌شود
+  #   expose: ["8000"]          # فقط داخل شبکه داکر — nginx کانتینر وب proxy می‌کند
+  #
+  # worker:
+  #   build: ./backend
+  #   container_name: varvpn-worker
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   command: python -m app.worker
+  # ------------------------------------------------------------
+
+networks:
+  default:
+    name: varvpn-net

@@ -361,6 +361,27 @@ export default function TestLab() {
           )}
         </div>
       </Reveal>
+
+      {/* ---------------- 5) deploy roadmap ---------------- */}
+      <Reveal delay={120}>
+        <SectionHead title="مسیر استقرار روی سرور" sub="Docker + Git" icon={<IcServer className="w-5 h-5" />} />
+        <div className="space-y-2.5">
+          <Cmd label="۱) لوکال: گیت و پوش کردن (فایل .env هرگز گیت نمی‌شود)" code={"git init && git add -A && git commit -m \"var-vpn web\"\ngit remote add origin git@github.com:YOU/var-vpn.git\ngit push -u origin main"} />
+          <Cmd label="۲) سرور: نصب Docker (یک‌بار)" code={"curl -fsSL https://get.docker.com | sh\nsudo usermod -aG docker $USER"} />
+          <Cmd label="۳) سرور: کلون و اجرا (کانتینر varvpn-web روی پورت ۸۰۹۰)" code={"cd /opt && git clone git@github.com:YOU/var-vpn.git\ncd var-vpn && cp .env.example .env   # و مقادیر واقعی\ndocker compose up -d --build web\ncurl http://127.0.0.1:8090/healthz"} />
+          <Cmd label="۴) سرور: دامنه + HTTPS با vhost جدید (دست به vhost دالاردیوس نزنید)" code={"# /etc/nginx/sites-available/varvpn → proxy_pass http://127.0.0.1:8090\nsudo ln -s /etc/nginx/sites-available/varvpn /etc/nginx/sites-enabled/\nsudo nginx -t && sudo systemctl reload nginx\nsudo certbot --nginx -d app.yourdomain.com"} />
+          <Cmd label="۵) تلگرام: BotFather → /mybots → Bot Settings → Menu Button" code={"Configure Menu Button → https://app.yourdomain.com\nعنوان: VAR VPN — سپس t.me/YOUR_BOT را باز کنید"} />
+          <Cmd label="۶) آپدیت‌های بعدی: فقط این (یا scripts/deploy.sh)" code={"cd /opt/var-vpn && ./scripts/deploy.sh"} />
+        </div>
+        <div className="card !border-coral-500/30 px-4 py-3 mt-3 flex gap-2.5">
+          <IcAlert className="w-4 h-4 text-coral-300 shrink-0 mt-0.5" />
+          <p className="text-[0.68rem] leading-5 text-mist-400">
+            <b className="text-coral-300">خط قرمزها:</b> هرگز <code dir="ltr" className="text-mist-300">docker compose down</code> روی سرویس‌های موجود نزنید، به
+            کانتینر دالاردیوس و FreeRADIUS هاست دست نزنید، و <code dir="ltr" className="text-mist-300">.env</code> را گیت نکنید. راهنمای کامل:{" "}
+            <code dir="ltr" className="text-mint-300">docs/DEPLOY.md</code> در مخزن.
+          </p>
+        </div>
+      </Reveal>
     </div>
   );
 }
